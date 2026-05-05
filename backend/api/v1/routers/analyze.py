@@ -1,14 +1,16 @@
+import asyncio
 from fastapi import APIRouter, Depends, Form, File, UploadFile, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from pathlib import Path
 
 from backend.db.session import get_db
 from backend.db.models import AnalysisSession, AnalysisTask
-from backend.core.dependencies import get_current_user, get_pagination
-from backend.core.exceptions import InvalidFileTypeError, FileTooLargeError
+from backend.core.dependencies import get_current_user, get_pagination, get_model_registry
+from backend.core.exceptions import InvalidFileTypeError, FileTooLargeError, ModelNotLoadedError
 from backend.utils.validators import ImageValidator, sanitize_symptoms_text, validate_patient_id, safe_temp_path
 from backend.api.v1.schemas.analysis import TaskSubmitResponse, TaskStatusResponse, AnalysisResult
 from backend.orchestration.queue import task_queue
+from backend.ml.nlp.whisper import WhisperTranscriber
 
 router = APIRouter()
 
@@ -77,3 +79,29 @@ async def get_result(task_id: str, db: AsyncSession = Depends(get_db), current_u
 async def cancel_task(task_id: str, current_user = Depends(get_current_user)):
     success = await task_queue.cancel(task_id, current_user.id)
     return {"cancelled": success, "message": "Task cancelled" if success else "Cannot cancel task"}
+
+@router.post("/transcribe")
+async def transcribe_audio(
+    audio: UploadFile = File(...),
+    registry = Depends(get_model_registry),
+    current_user = Depends(get_current_user)
+):
+    if audio.content_type not in ["audio/wav", "audio/mpeg", "audio/webm", "audio/ogg"]:
+        raise InvalidFileTypeError("Audio must be WAV, MP3, WebM, or OGG")
+        
+    content = await audio.read()
+    if len(content) > 25 * 1024 * 1024:
+        raise FileTooLargeError("Audio file too large (max 25MB)")
+        
+    temp_path = safe_temp_path(audio.filename or "audio.webm")
+    temp_path.write_bytes(content)
+    
+    try:
+        whisper_state = await registry.get("whisper_tiny")
+        if not whisper_state.is_available:
+            raise ModelNotLoadedError("Voice transcription unavailable")
+            
+        result = await asyncio.to_thread(WhisperTranscriber.transcribe, temp_path, whisper_state.model)
+        return result
+    finally:
+        temp_path.unlink(missing_ok=True)
