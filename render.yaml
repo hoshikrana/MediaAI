@@ -1,0 +1,51 @@
+services:
+  - type: web
+    name: medsight-ai-backend
+    runtime: python
+    region: oregon
+    plan: free
+    
+    buildCommand: |
+      cd backend
+      pip install -r requirements-prod.txt --no-cache-dir
+    
+    startCommand: |
+      cd backend
+      uvicorn main:app --host 0.0.0.0 --port $PORT --workers 1
+    
+    envVars:
+      - key: ENVIRONMENT
+        value: production
+      - key: RENDER
+        value: "true"
+      - key: SECRET_KEY
+        sync: false
+      - key: JWT_SECRET_KEY
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: HF_TOKEN
+        sync: false
+      - key: FRONTEND_URL
+        value: https://medsight-ai.vercel.app
+      - key: ALLOWED_ORIGINS
+        value: https://medsight-ai.vercel.app
+      - key: LOG_LEVEL
+        value: INFO
+      - key: DEBUG
+        value: "false"
+      - key: PYTHONUNBUFFERED
+        value: "1"
+      - key: HF_HOME
+        value: /opt/render/project/hf_cache
+    
+    healthCheckPath: /api/v1/health
+    
+    disk:
+      name: hf-cache
+      mountPath: /opt/render/project/hf_cache
+      sizeGB: 1

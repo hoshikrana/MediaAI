@@ -1,0 +1,19 @@
+name: Keep Alive — Prevent Render Sleep
+
+on:
+  schedule:
+    - cron: "*/14 * * * *"  # every 14 minutes
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping backend health
+        run: |
+          response=$(curl -s -o /dev/null -w "%{http_code}" \
+            "${{ secrets.RENDER_SERVICE_URL }}/api/v1/health" \
+            --max-time 30)
+          echo "Health check response: $response"
+          if [ "$response" != "200" ] && [ "$response" != "503" ]; then
+            echo "Warning: unexpected response $response"
+          fi
