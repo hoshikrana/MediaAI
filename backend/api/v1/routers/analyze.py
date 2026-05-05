@@ -1,0 +1,79 @@
+from fastapi import APIRouter, Depends, Form, File, UploadFile, HTTPException, Request
+from sqlalchemy.ext.asyncio import AsyncSession
+from pathlib import Path
+
+from backend.db.session import get_db
+from backend.db.models import AnalysisSession, AnalysisTask
+from backend.core.dependencies import get_current_user, get_pagination
+from backend.core.exceptions import InvalidFileTypeError, FileTooLargeError
+from backend.utils.validators import ImageValidator, sanitize_symptoms_text, validate_patient_id, safe_temp_path
+from backend.api.v1.schemas.analysis import TaskSubmitResponse, TaskStatusResponse, AnalysisResult
+from backend.orchestration.queue import task_queue
+
+router = APIRouter()
+
+@router.post("/", response_model=TaskSubmitResponse)
+async def analyze_submission(
+    request: Request,
+    image: UploadFile = File(...),
+    symptoms_text: str = Form(""),
+    patient_id: str = Form(""),
+    current_user = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    if not image:
+        raise HTTPException(status_code=422, detail="image field is required")
+        
+    img_meta = await ImageValidator.validate(image)
+    clean_symptoms = sanitize_symptoms_text(symptoms_text)
+    clean_patient_id = validate_patient_id(patient_id)
+    
+    temp_path = safe_temp_path(img_meta.filename)
+    with open(temp_path, "wb") as f:
+        f.write(img_meta.content)
+        
+    session = AnalysisSession(
+        user_id=current_user.id,
+        patient_id=clean_patient_id,
+        status="PENDING",
+        image_filename=img_meta.filename,
+        image_hash="hash_placeholder", # Ideally use hashlib
+        symptoms_text=clean_symptoms,
+        # Set expiry for DB cleanup
+    )
+    db.add(session)
+    await db.commit()
+    await db.refresh(session)
+    
+    task_id = await task_queue.submit(
+        session_id=session.id, user_id=current_user.id,
+        image_path=str(temp_path), symptoms_text=clean_symptoms, priority=1
+    )
+    
+    status_data = await task_queue.get_status(task_id)
+    return TaskSubmitResponse(
+        task_id=task_id, session_id=session.id, 
+        estimated_wait_seconds=status_data.get("estimated_wait_seconds", 45), 
+        position_in_queue=status_data.get("position_in_queue", 1)
+    )
+
+@router.get("/status/{task_id}", response_model=TaskStatusResponse)
+async def get_status(task_id: str, current_user = Depends(get_current_user)):
+    return await task_queue.get_status(task_id)
+
+@router.get("/result/{task_id}")
+async def get_result(task_id: str, db: AsyncSession = Depends(get_db), current_user = Depends(get_current_user)):
+    status_data = await task_queue.get_status(task_id)
+    if status_data["status"] != "COMPLETED":
+        return {"status": status_data["status"], "message": "Analysis still in progress"}
+        
+    session = await db.get(AnalysisSession, status_data["session_id"])
+    if not session or session.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+        
+    return session.result_json
+
+@router.delete("/{task_id}")
+async def cancel_task(task_id: str, current_user = Depends(get_current_user)):
+    success = await task_queue.cancel(task_id, current_user.id)
+    return {"cancelled": success, "message": "Task cancelled" if success else "Cannot cancel task"}
