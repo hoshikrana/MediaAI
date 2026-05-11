@@ -1,0 +1,244 @@
+# MedSight AI — Model Choice & Dataset Guide
+
+---
+
+## 1. The Dataset Situation
+
+### What Data Do We Need?
+
+For **anomaly detection** in chest X-rays, the key insight is:
+> You only train on **NORMAL** images. The model learns what "healthy" looks like. Anything that looks different from normal = anomaly.
+
+This is called **unsupervised anomaly detection** — you don't need radiologists to label every disease. You just need a big set of normal scans.
+
+### Available Datasets
+
+| Dataset | Images | Size | License | Normal subset |
+|---|---|---|---|---|
+| **NIH ChestX-ray14** | 112,120 | ~42GB (images) | Free, public | ~60,000 "No Finding" images |
+| **CheXpert (Stanford)** | 224,316 | ~40GB | Free for research | Register at cheXpert.stanford.edu |
+| **MIMIC-CXR** | 377,110 | ~100GB | Requires PhysioNet account | Credentialing takes 1–2 weeks |
+| **VinDr-CXR** | 18,000 | ~7GB | Free (Kaggle) | Good quality, Vietnamese population |
+| **PadChest** | 160,000 | ~100GB | Free for research | Spanish dataset |
+
+### ✅ Recommended: NIH ChestX-ray14 "No Finding" Subset
+
+- **Download link**: https://nihcc.app.box.com/v/ChestXray-NIHCC
+- You only need the images labeled `No Finding` in `Data_Entry_2017.csv`
+- That gives you ~26,000 frontal chest X-rays of healthy patients
+- Size: ~6GB (just the normal subset)
+- Completely free, no registration
+
+> **For BioBERT NER training** (separate task):
+> - NCBI Disease Corpus: ~793 PubMed abstracts, annotated with disease names — ~1MB, free
+> - BC5CDR: 1,500 PubMed articles with chemical+disease NER — free
+
+---
+
+## 2. Why DINOv2? — And Why It May Be Wrong For You
+
+### What DINOv2 Does in This Project
+
+The original plan uses DINOv2 as a **frozen feature extractor**:
+```
+Image → DINOv2 (frozen, ~400MB) → 384-dim feature vector → Small Autoencoder Head → Reconstruction Error
+```
+
+DINOv2 itself is NOT trained — only the small projection head is trained. DINOv2 just extracts rich visual features.
+
+### Why Someone Would Choose DINOv2
+- Fantastic feature quality — trained on 142M images via self-supervised learning
+- Works with **very few normal training images** (even 500 images can work)
+- No need to design a CNN architecture
+
+### Why DINOv2 is WRONG for your production use case
+
+| Problem | Reality |
+|---|---|
+| **Model size** | 400MB just for the feature extractor. Plus your head. Total ~450MB |
+| **Inference speed** | ViT models are slow on CPU. ~5-15 seconds per image on CPU server |
+| **Memory** | 400MB VRAM minimum to run efficiently |
+| **Dependency cost** | Requires `transformers`, `timm`, PyTorch — heavy stack |
+| **ONNX export** | Possible but complex — the attention mechanism adds overhead |
+| **Cost on cloud** | GPU servers cost $50–200/month. CPU inference is too slow with DINOv2 |
+
+---
+
+## 3. Better Architecture: Custom ConvAE
+
+### What is a Convolutional Autoencoder (ConvAE)?
+
+```
+Input Image (1×224×224)
+      ↓
+  [ENCODER] — Convolutional layers that compress
+      ↓
+  [BOTTLENECK] — e.g., 16×14×14 = 3,136 values (compressed representation)
+      ↓
+  [DECODER] — Transposed convolutions that reconstruct
+      ↓
+Reconstructed Image (1×224×224)
+      ↓
+MSE Loss vs. Original = Reconstruction Error
+      ↓
+High Error → ANOMALY | Low Error → NORMAL
+```
+
+**The logic:** The model learns to perfectly reconstruct normal chest X-rays. When you feed an abnormal image, it can't reconstruct it well → high MSE → anomaly detected.
+
+### ConvAE vs DINOv2 Head: Comparison
+
+| | **ConvAE (Custom)** | **DINOv2 + Head** |
+|---|---|---|
+| Model size | **~2–8MB** | ~450MB |
+| Inference speed (CPU) | **0.1–0.5 sec** | 5–15 sec |
+| ONNX export | **Easy** | Complex |
+| Training time | ~2 hrs (GPU) | ~2 hrs (GPU) |
+| Training data needed | 10,000+ images | 500+ images |
+| Feature quality | Good (domain-specific) | Excellent (general) |
+| Deployable on cheap CPU server | **Yes** | No (too slow) |
+| Fully yours (no HuggingFace dep) | **Yes** | No |
+
+### ConvAE Architecture for Chest X-rays
+
+```python
+class ChestConvAE(nn.Module):
+    def __init__(self):
+        super().__init__()
+        # ENCODER: 1×224×224 → 64×7×7
+        self.encoder = nn.Sequential(
+            nn.Conv2d(1, 32, 4, stride=2, padding=1),   # 32×112×112
+            nn.BatchNorm2d(32), nn.LeakyReLU(0.2),
+            nn.Conv2d(32, 64, 4, stride=2, padding=1),  # 64×56×56
+            nn.BatchNorm2d(64), nn.LeakyReLU(0.2),
+            nn.Conv2d(64, 128, 4, stride=2, padding=1), # 128×28×28
+            nn.BatchNorm2d(128), nn.LeakyReLU(0.2),
+            nn.Conv2d(128, 128, 4, stride=2, padding=1),# 128×14×14
+            nn.BatchNorm2d(128), nn.LeakyReLU(0.2),
+            nn.Conv2d(128, 64, 4, stride=2, padding=1), # 64×7×7 (bottleneck)
+            nn.BatchNorm2d(64), nn.LeakyReLU(0.2),
+        )
+        # DECODER: 64×7×7 → 1×224×224
+        self.decoder = nn.Sequential(
+            nn.ConvTranspose2d(64, 128, 4, stride=2, padding=1),  # 128×14×14
+            nn.BatchNorm2d(128), nn.ReLU(),
+            nn.ConvTranspose2d(128, 128, 4, stride=2, padding=1), # 128×28×28
+            nn.BatchNorm2d(128), nn.ReLU(),
+            nn.ConvTranspose2d(128, 64, 4, stride=2, padding=1),  # 64×56×56
+            nn.BatchNorm2d(64), nn.ReLU(),
+            nn.ConvTranspose2d(64, 32, 4, stride=2, padding=1),   # 32×112×112
+            nn.BatchNorm2d(32), nn.ReLU(),
+            nn.ConvTranspose2d(32, 1, 4, stride=2, padding=1),    # 1×224×224
+            nn.Sigmoid()  # Output: pixel values 0-1
+        )
+    
+    def forward(self, x):
+        return self.decoder(self.encoder(x))
+```
+
+**Bottleneck:** 64×7×7 = 3,136 values from a 224×224 image = **50:1 compression ratio**
+
+**Total parameters:** ~2.3M — trains in 2 hours on a decent GPU, exports to ONNX at ~8MB.
+
+---
+
+## 4. Production / Web Deployment Reality
+
+### What "Run on Web" Means
+
+There are two very different things:
+
+**Option A: Browser-side inference (WebAssembly / TensorFlow.js / ONNX Runtime Web)**
+- Model runs IN the user's browser — no server needed for inference
+- Works for tiny models (<25MB)
+- Our ConvAE (8MB) could work here with ONNX.js
+- BioBERT is 440MB — NOT possible in browser
+- BioGPT is 700MB — NOT possible in browser
+
+**Option B: Server-side inference (FastAPI + uvicorn, deployed on cloud)**
+- User sends image → server runs model → returns result
+- This is what MedSight currently is designed to do
+- Works for ALL model sizes
+- Needs a cloud server (Render, Railway, Fly.io, AWS, etc.)
+
+### For MedSight AI: Server-side is the right choice
+
+Medical imaging analysis should always be server-side because:
+1. Models are too large for in-browser (BioGPT, BioBERT)
+2. Medical data privacy — you control what happens on your server
+3. Consistent performance — not dependent on user's device
+
+### Production Server Options (Realistic for Your Budget)
+
+| Platform | GPU? | Price/month | Suitable? |
+|---|---|---|---|
+| **Render.com** | No GPU | $7–25 | ✅ Yes — with ConvAE + ONNX |
+| **Railway.app** | No GPU | $5–20 | ✅ Yes — with ConvAE + ONNX |
+| **Fly.io** | No GPU | $3–30 | ✅ Yes — with ConvAE + ONNX |
+| **Hugging Face Spaces** | GPU (shared) | Free–$25 | ✅ Good for demo |
+| **AWS EC2 t3.medium** | No GPU | ~$30 | ✅ Stable, scalable |
+| **Vast.ai** | GPU | $0.1–0.5/hr | ✅ For training only |
+
+**With ConvAE (~8MB ONNX), you can run on the cheapest CPU server ($7/month) and still get inference in 0.3 seconds.**  
+**With DINOv2 (~450MB PyTorch), you need a GPU server ($50–200/month) to get acceptable speed.**
+
+---
+
+## 5. Revised ML Architecture for Production
+
+### Replace DINOv2 with ConvAE
+
+| Component | Old Plan (DINOv2) | New Plan (ConvAE) |
+|---|---|---|
+| Vision model | DINOv2-small (400MB) + Head | **Custom ConvAE (~8MB ONNX)** |
+| Training data | 500+ normal images | **10,000–26,000 normal images** |
+| Inference time CPU | 5–15 sec | **0.1–0.5 sec** |
+| Deployment | GPU required | **Any CPU server** |
+| Heatmap method | Grad-CAM (complex) | **Pixel-diff reconstruction map** |
+
+### Revised Model Stack
+
+```
+KEEP:    BioBERT NER (fine-tuned) → export to ONNX for fast CPU
+KEEP:    MiniLM-L6 (RAG embeddings) → fast, CPU-native
+KEEP:    BioGPT (report + chat) → runs on CPU, acceptable speed
+KEEP:    Whisper-Tiny → CPU, works fine
+REPLACE: DINOv2 + Head → Custom ConvAE (ONNX-exported)
+DROP:    BiomedVLP (900MB, optional) → use keyword fallback in production
+```
+
+### Final Production Memory Footprint
+
+| Model | Format | RAM |
+|---|---|---|
+| ConvAE | ONNX | ~50MB |
+| BioBERT NER | ONNX | ~200MB |
+| MiniLM | native | ~100MB |
+| BioGPT | PyTorch | ~700MB |
+| Whisper-tiny | native | ~150MB |
+| **Total** | | **~1.2GB RAM** |
+
+This runs on a **2GB RAM server** — no GPU needed.
+
+---
+
+## 6. Recommended Build Order
+
+```
+Step 1: Write ConvAE architecture + training script
+        → Input: NIH ChestX-ray14 "No Finding" images
+        → Output: chest_convae.onnx (8MB)
+
+Step 2: Fine-tune BioBERT NER + export to ONNX
+        → Input: NCBI Disease Corpus
+        → Output: biobert_ner.onnx (440MB → 220MB quantized)
+
+Step 3: Download & test pretrained models (no training)
+        → BioGPT, MiniLM, Whisper
+
+Step 4: Fetch PubMed abstracts → populate ChromaDB
+
+Step 5: Wire everything into AnalysisPipeline using ONNX Runtime
+```
+
+> **Say "build the ConvAE training script" and I'll write the full training code with dataset download, training loop, ONNX export, and stats calibration.**
