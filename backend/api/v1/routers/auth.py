@@ -1,5 +1,7 @@
 import logging
+from datetime import datetime, timezone
 from fastapi import APIRouter, Request, Depends, BackgroundTasks
+from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -27,13 +29,17 @@ from backend.core.config import settings
 logger = logging.getLogger(__name__)
 
 oauth = OAuth()
-oauth.register(
-    name="google",
-    server_metadata_url="https://accounts.google.com/.well-known/openid-configuration",
-    client_id=settings.GOOGLE_CLIENT_ID,
-    client_secret=settings.GOOGLE_CLIENT_SECRET,
-    client_kwargs={"scope": "openid email profile"},
-)
+_google_oauth_enabled = bool(settings.GOOGLE_CLIENT_ID and settings.GOOGLE_CLIENT_SECRET)
+if _google_oauth_enabled:
+    oauth.register(
+        name="google",
+        server_metadata_url="https://accounts.google.com/.well-known/openid-configuration",
+        client_id=settings.GOOGLE_CLIENT_ID,
+        client_secret=settings.GOOGLE_CLIENT_SECRET,
+        client_kwargs={"scope": "openid email profile"},
+    )
+else:
+    logger.warning("Google OAuth not configured — Google login disabled")
 
 router = APIRouter()
 
@@ -41,12 +47,16 @@ router = APIRouter()
 @router.get("/google/login")
 async def google_login(request: Request):
     """Redirects to Google consent screen."""
+    if not _google_oauth_enabled:
+        return JSONResponse(status_code=501, content={"message": "Google OAuth not configured"})
     redirect_uri = settings.GOOGLE_REDIRECT_URI
     return await oauth.google.authorize_redirect(request, redirect_uri)
 
 @router.get("/google/callback")
 async def google_callback(request: Request, db: AsyncSession = Depends(get_db)):
     """Handles Google OAuth callback."""
+    if not _google_oauth_enabled:
+        return JSONResponse(status_code=501, content={"message": "Google OAuth not configured"})
     # Step 1: Exchange code for token
     try:
         google_token = await oauth.google.authorize_access_token(request)
@@ -100,10 +110,6 @@ async def send_verification_email(email: str, token: str):
     # TODO: Implement actual email sending logic
     logger.info(f"MOCK EMAIL to {email}: Your verification token is {token}")
 
-async def update_login_stats(user_id: str, ip: str):
-    # TODO: Update last_login_at in DB
-    pass
-
 @router.post("/register", response_model=MessageResponse)
 @limiter.limit("3/hour")
 async def register(
@@ -123,17 +129,19 @@ async def register(
         email=body.email,
         full_name=body.full_name,
         hashed_password=hash_password(body.password),
-        is_active=False # Requires email verification
+        is_active=not settings.is_production,  # Auto-active in dev, requires verification in prod
+        is_verified=not settings.is_production
     )
     db.add(user)
     await db.commit()
     await db.refresh(user)
     
-    plain_token, token_hash = generate_verification_token()
+    plain_token, _token_hash = generate_verification_token()
     background_tasks.add_task(send_verification_email, user.email, plain_token)
     
     logger.info("User registered", extra={"user_id": str(user.id), "email": user.email})
-    return MessageResponse(message="Account created. Check your email to verify.")
+    message = "Account created. You can sign in now." if not settings.is_production else "Account created. Check your email to verify."
+    return MessageResponse(message=message)
 
 @router.post("/login", response_model=AuthResponse)
 @limiter.limit("5/minute")
@@ -144,7 +152,7 @@ async def login(
     db: AsyncSession = Depends(get_db),
     client_ip: str = Depends(get_client_ip)
 ):
-    await brute_force_protector.check_and_record_failure(client_ip)
+    brute_force_protector.check_lockout(client_ip)
     
     user = await User.get_by_email(db, form_data.username)
     if not user or not user.hashed_password or not verify_password(form_data.password, user.hashed_password):
@@ -155,19 +163,20 @@ async def login(
         raise AccountInactiveError("Please verify your email before logging in")
         
     brute_force_protector.record_success(client_ip)
+    user.last_login_at = datetime.now(timezone.utc).isoformat()
+    user.login_count = (user.login_count or 0) + 1
+    await db.commit()
     
     access_token = create_access_token(user.id)
     refresh_token = create_refresh_token(user.id)
     
-    response = JSONResponse(content=AuthResponse(
+    response = JSONResponse(content=jsonable_encoder(AuthResponse(
         token=TokenResponse(access_token=access_token, token_type="bearer", 
                            expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60),
         user=UserResponse.model_validate(user)
-    ).model_dump())
+    )))
     
     set_refresh_cookie(response, refresh_token)
-    background_tasks.add_task(update_login_stats, user.id, client_ip)
-    
     logger.info("User logged in", extra={"user_id": str(user.id)})
     return response
 

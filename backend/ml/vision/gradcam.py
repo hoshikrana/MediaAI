@@ -7,73 +7,43 @@ import torch
 from torchvision import transforms
 from PIL import Image, ImageDraw
 
-class DINOAttentionRollout:
-    """Extracts spatial attention maps from DINOv2 using Rollout."""
-    def __init__(self, model, discard_ratio: float = 0.9):
-        self.model = model
-        self.discard_ratio = discard_ratio
-        self._attention_maps = []
-        self._hooks = []
-    
-    def _register_hooks(self):
-        def hook_fn(module, input, output):
-            self._attention_maps.append(output.detach())
+class ReconstructionDiffMap:
+    """Visualizes anomalies by highlighting pixel-wise reconstruction error."""
+    @staticmethod
+    def generate(original_image: Image.Image, reconstructed_np: np.ndarray) -> np.ndarray:
+        # original_image: PIL Image (128x128 or 224x224)
+        # reconstructed_np: np.ndarray normalized (0-1)
         
-        for block in self.model.blocks:
-            hook = block.attn.register_forward_hook(hook_fn)
-            self._hooks.append(hook)
-    
-    def _remove_hooks(self):
-        for hook in self._hooks:
-            hook.remove()
-        self._hooks.clear()
-        self._attention_maps.clear()
-    
-    @torch.no_grad()
-    def compute_rollout(self, image_tensor: torch.Tensor) -> np.ndarray:
-        self._attention_maps = []
-        self._register_hooks()
+        orig_np = np.array(original_image.convert("L"), dtype=np.float32) / 255.0
         
-        try:
-            _ = self.model(image_tensor)
-        finally:
-            self._remove_hooks()
-            
-        result = torch.eye(197, device=image_tensor.device)
+        # Calculate absolute difference
+        diff = np.abs(orig_np - reconstructed_np)
         
-        for attn in self._attention_maps:
-            attn_mean = attn.mean(dim=1) 
-            
-            flat = attn_mean.view(attn_mean.size(0), -1)
-            threshold = torch.quantile(flat, self.discard_ratio, dim=-1, keepdim=True)
-            threshold = threshold.view(-1, 1, 1)
-            attn_mean = torch.where(attn_mean >= threshold, attn_mean, torch.zeros_like(attn_mean))
-            
-            attn_mean = attn_mean + torch.eye(197, device=image_tensor.device)
-            attn_mean = attn_mean / attn_mean.sum(dim=-1, keepdim=True)
-            result = torch.matmul(attn_mean[0], result)
-            
-        mask = result[0, 1:]
-        mask = mask.reshape(14, 14)
-        mask = mask.cpu().numpy()
-        mask = (mask - mask.min()) / (mask.max() - mask.min() + 1e-8)
-        return mask
+        # Apply Gaussian blur to smooth the heatmap
+        heatmap = cv2.GaussianBlur(diff, (15, 15), 0)
+        
+        # Normalize to 0-1
+        heatmap = (heatmap - heatmap.min()) / (heatmap.max() - heatmap.min() + 1e-8)
+        return heatmap
 
 class GradCAM:
-    @staticmethod
-    def generate(image_path: Path, model, anomaly_score: float) -> tuple[str, list[dict]]:
-        device = next(model.parameters()).device
-        
+    def generate(image_path: Path, model_session, anomaly_score: float, reconstructed_np: np.ndarray | None = None) -> tuple[str, list[dict]]:
         original_image = Image.open(image_path).convert("RGB")
+        img_size = original_image.size # (W, H)
         original_np = np.array(original_image.resize((224, 224)))
         
-        image_tensor = GradCAM._preprocess(original_image, device)
-        
-        rollout = DINOAttentionRollout(model.dino if hasattr(model, 'dino') else model, discard_ratio=0.9)
-        attention_map = rollout.compute_rollout(image_tensor)
-        
-        heatmap = cv2.resize(attention_map, (224, 224))
-        heatmap = np.float32(heatmap)
+        if reconstructed_np is not None:
+            # ConvAE path: uses reconstruction difference
+            heatmap = ReconstructionDiffMap.generate(original_image.resize((224, 224)), reconstructed_np)
+        else:
+            # ViT path: uses DINO rollout (if model_session is a torch model)
+            # This is deprecated in Zero-Budget mode but kept for compatibility
+            device = next(model_session.parameters()).device if hasattr(model_session, "parameters") else "cpu"
+            image_tensor = GradCAM._preprocess(original_image, device)
+            rollout = DINOAttentionRollout(model_session, discard_ratio=0.9)
+            attention_map = rollout.compute_rollout(image_tensor)
+            heatmap = cv2.resize(attention_map, (224, 224))
+            heatmap = np.float32(heatmap)
         
         heatmap_colored = cv2.applyColorMap(np.uint8(255 * heatmap), cv2.COLORMAP_HOT)
         heatmap_colored = cv2.cvtColor(heatmap_colored, cv2.COLOR_BGR2RGB)

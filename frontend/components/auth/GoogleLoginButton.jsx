@@ -6,7 +6,8 @@ export default function GoogleLoginButton() {
 
     const handleGoogleLogin = () => {
         setLoading(true);
-        window.location.href = `${process.env.NEXT_PUBLIC_API_URL}/api/v1/auth/google/login`;
+        const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+        window.location.href = `${API_URL}/api/v1/auth/google/login`;
     };
 
     return (

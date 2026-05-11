@@ -1,6 +1,6 @@
 import io
 import base64
-from datetime import datetime, UTC
+from datetime import datetime, timezone
 from pathlib import Path
 from PIL import Image as PILImage
 
@@ -32,7 +32,7 @@ class MedicalReportGenerator:
         styles.add(ParagraphStyle(name='TitleNavy', parent=styles['Heading1'], textColor=NAVY, fontSize=24, alignment=TA_CENTER))
         styles.add(ParagraphStyle(name='SubtitleGray', parent=styles['Normal'], textColor=GRAY, fontSize=12, alignment=TA_CENTER))
         styles.add(ParagraphStyle(name='SectionHeader', parent=styles['Heading2'], textColor=TEAL, fontSize=16, spaceAfter=12))
-        styles.add(ParagraphStyle(name='BodyText', parent=styles['Normal'], fontSize=10, leading=14))
+        styles.add(ParagraphStyle(name='CustomBodyText', parent=styles['Normal'], fontSize=10, leading=14))
         styles.add(ParagraphStyle(name='Disclaimer', parent=styles['Normal'], textColor=black, fontSize=9, backColor=HexColor("#FFF9C4"), borderPadding=10))
 
         story = []
@@ -45,7 +45,7 @@ class MedicalReportGenerator:
         # Meta Table
         meta_data = [
             ["Report ID:", session_data.get("id", "N/A")],
-            ["Generated:", datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S UTC")],
+            ["Generated:", datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")],
             ["Patient ID:", session_data.get("patient_id", "Anonymous")],
             ["Status:", session_data.get("status", "N/A")]
         ]
@@ -102,14 +102,14 @@ class MedicalReportGenerator:
                 # but best to delete it immediately after ReportLab builds the doc.
                 # ReportLab reads it lazily, so we leave it for now.
             except Exception as e:
-                story.append(Paragraph(f"<i>Could not render heatmap image.</i>", styles['BodyText']))
+                story.append(Paragraph(f"<i>Could not render heatmap image.</i>", styles['CustomBodyText']))
                 
         story.append(Spacer(1, 0.5 * inch))
-        story.append(Paragraph(f"<b>Anomaly Score:</b> {vision.get('anomaly_score', 'N/A')} / 100", styles['BodyText']))
+        story.append(Paragraph(f"<b>Anomaly Score:</b> {vision.get('anomaly_score', 'N/A')} / 100", styles['CustomBodyText']))
         
         if vision.get("top_regions"):
             story.append(Spacer(1, 0.2 * inch))
-            story.append(Paragraph("<b>Top Suspicious Regions:</b>", styles['BodyText']))
+            story.append(Paragraph("<b>Top Suspicious Regions:</b>", styles['CustomBodyText']))
             r_data = [["Region", "Confidence", "Coordinates (X,Y,W,H)"]]
             for i, r in enumerate(vision["top_regions"], 1):
                 r_data.append([str(i), f"{r.get('confidence', 0)*100:.1f}%", f"{r.get('x')}, {r.get('y')}, {r.get('width')}, {r.get('height')}"])
@@ -130,12 +130,12 @@ class MedicalReportGenerator:
         nlp = result_json.get("nlp", {})
         
         if nlp:
-            story.append(Paragraph(f"<b>Primary Impression:</b> {nlp.get('primary_diagnosis', 'N/A')}", styles['BodyText']))
-            story.append(Paragraph(f"<b>Confidence:</b> {nlp.get('diagnosis_confidence', 0)*100:.1f}%", styles['BodyText']))
+            story.append(Paragraph(f"<b>Primary Impression:</b> {nlp.get('primary_diagnosis', 'N/A')}", styles['CustomBodyText']))
+            story.append(Paragraph(f"<b>Confidence:</b> {nlp.get('diagnosis_confidence', 0)*100:.1f}%", styles['CustomBodyText']))
             story.append(Spacer(1, 0.2*inch))
             
             if nlp.get("differential"):
-                story.append(Paragraph("<b>Differential Diagnosis:</b>", styles['BodyText']))
+                story.append(Paragraph("<b>Differential Diagnosis:</b>", styles['CustomBodyText']))
                 diff_data = [["Condition", "Confidence"]]
                 for d in nlp["differential"]:
                     diff_data.append([d.get("disease"), f"{d.get('confidence', 0)*100:.1f}%"])
@@ -148,7 +148,7 @@ class MedicalReportGenerator:
                 ]))
                 story.append(t_diff)
         else:
-            story.append(Paragraph("<i>No NLP data available.</i>", styles['BodyText']))
+            story.append(Paragraph("<i>No NLP data available.</i>", styles['CustomBodyText']))
             
         story.append(PageBreak())
 
@@ -156,12 +156,22 @@ class MedicalReportGenerator:
         story.append(Paragraph("AI Narrative Report", styles['SectionHeader']))
         report_text = result_json.get("report_text", "No narrative generated.")
         
-        # Simple markdown to ReportLab parsing (bolding)
-        report_text = report_text.replace("**", "<b>").replace("###", "<b><u>").replace("##", "<font size=14 color='#00D4B4'><b>").replace("\n", "<br/>")
+        # Simple markdown to ReportLab parsing
+        import re
+        def md_to_rl(text):
+            # Convert markdown bold **text** to <b>text</b>
+            text = re.sub(r'\*\*(.+?)\*\*', r'<b>\1</b>', text)
+            # Strip heading markers (### and ##) and wrap in bold
+            text = re.sub(r'^###\s*(.+)$', r'<b><u>\1</u></b>', text, flags=re.MULTILINE)
+            text = re.sub(r'^##\s*(.+)$', r'<font size="14" color="#00D4B4"><b>\1</b></font>', text, flags=re.MULTILINE)
+            # Convert line breaks
+            text = text.replace('\n', '<br/>')
+            return text
+        report_text = md_to_rl(report_text)
         
-        story.append(Paragraph(report_text, styles['BodyText']))
+        story.append(Paragraph(report_text, styles['CustomBodyText']))
         story.append(Spacer(1, 0.5*inch))
-        story.append(Paragraph("<i>Footnote: Report generated by BioGPT-base language model.</i>", styles['BodyText']))
+        story.append(Paragraph("<i>Footnote: Report generated by BioGPT-base language model.</i>", styles['CustomBodyText']))
 
         # Build Document with Footer callback
         def add_footer(canvas, doc):

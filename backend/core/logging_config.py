@@ -1,7 +1,7 @@
 import json
 import logging
 from logging.handlers import RotatingFileHandler
-from datetime import datetime, UTC
+from datetime import datetime, timezone
 from contextvars import ContextVar
 from uuid import uuid4
 
@@ -27,7 +27,7 @@ class MaskingFilter(logging.Filter):
 class JSONFormatter(logging.Formatter):
     def format(self, record: logging.LogRecord) -> str:
         log_dict = {
-            "timestamp": datetime.fromtimestamp(record.created, UTC).isoformat(),
+            "timestamp": datetime.fromtimestamp(record.created, timezone.utc).isoformat(),
             "level": record.levelname,
             "logger": record.name,
             "message": record.getMessage(),

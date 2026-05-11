@@ -5,7 +5,7 @@ from enum import Enum
 from functools import wraps
 from typing import Callable, Tuple, Any
 from dataclasses import dataclass
-from datetime import datetime, UTC
+from datetime import datetime, timezone
 
 from backend.core.exceptions import (
     InferenceError, CircuitOpenError, ValidationError, 
@@ -96,7 +96,7 @@ class CircuitBreaker:
     @property
     def state(self) -> CircuitState:
         if self._state == CircuitState.OPEN and self._last_failure_time:
-            elapsed = (datetime.now(UTC) - self._last_failure_time).total_seconds()
+            elapsed = (datetime.now(timezone.utc) - self._last_failure_time).total_seconds()
             if elapsed >= self.config.timeout_seconds:
                 return CircuitState.HALF_OPEN
         return self._state
@@ -108,7 +108,7 @@ class CircuitBreaker:
             if current_state == CircuitState.OPEN:
                 next_attempt_in = (
                     self.config.timeout_seconds -
-                    (datetime.now(UTC) - self._last_failure_time).total_seconds()
+                    (datetime.now(timezone.utc) - self._last_failure_time).total_seconds()
                 )
                 raise CircuitOpenError(
                     f"Circuit '{self.config.name}' is OPEN. Retry in {max(0, next_attempt_in):.0f}s"
@@ -146,7 +146,7 @@ class CircuitBreaker:
         async with self._lock:
             self._failure_count += 1
             self._success_count = 0
-            self._last_failure_time = datetime.now(UTC)
+            self._last_failure_time = datetime.now(timezone.utc)
             
             current_state = self.state
             if current_state == CircuitState.HALF_OPEN:
@@ -170,7 +170,7 @@ class CircuitBreaker:
             "failure_threshold": self.config.failure_threshold,
             "last_failure": self._last_failure_time.isoformat() if self._last_failure_time else None,
             "next_attempt_seconds": max(0, self.config.timeout_seconds - (
-                (datetime.now(UTC) - self._last_failure_time).total_seconds()
+                (datetime.now(timezone.utc) - self._last_failure_time).total_seconds()
             )) if self._state == CircuitState.OPEN and self._last_failure_time else None
         }
 

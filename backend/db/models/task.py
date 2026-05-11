@@ -13,6 +13,7 @@ class AnalysisTask(Base, UUIDMixin, TimestampMixin):
     priority: Mapped[int] = mapped_column(Integer, default=1, index=True)
     attempt_count: Mapped[int] = mapped_column(Integer, default=0)
     image_path: Mapped[str] = mapped_column(String(512))
+    symptoms_text: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     started_at: Mapped[Optional[datetime]] = mapped_column(nullable=True)
     completed_at: Mapped[Optional[datetime]] = mapped_column(nullable=True)
     error_message: Mapped[Optional[str]] = mapped_column(String, nullable=True)

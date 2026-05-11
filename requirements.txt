@@ -11,6 +11,9 @@ numpy==1.26.4  # Last stable 1.x version before 2.0 breaking changes
 Pillow==10.2.0  # Safe version for PIL image processing
 opencv-python-headless==4.9.0.80  # Headless avoids Qt DLL conflicts on Windows servers
 openai-whisper==20231117  # Reliable version for Whisper CPU transcription
+onnxruntime==1.17.1  # Fast CPU inference for ConvAE
+scispacy==0.5.4  # Lightweight medical NLP
+# Install scispaCy model manually: pip install https://s3-us-west-2.amazonaws.com/ai2-s3-scispacy/releases/v0.5.1/en_core_sci_sm-0.5.1.tar.gz
 
 # [Backend]
 fastapi==0.110.0  # Base API framework
@@ -18,6 +21,7 @@ uvicorn[standard]==0.27.1  # ASGI server for FastAPI
 python-multipart==0.0.9  # Required for FastAPI file uploads
 pydantic==2.6.3  # Pydantic v2 exact version for type safety
 pydantic-settings==2.2.1  # Required for v2 configuration management
+email-validator==2.1.1  # Required by Pydantic EmailStr schemas
 slowapi==0.1.9  # Rate limiting without Redis
 python-jose[cryptography]==3.3.0  # JWT creation and verification
 passlib[bcrypt]==1.7.4  # Password hashing algorithms
@@ -44,6 +48,7 @@ python-dotenv==1.0.1  # Environment variable parsing
 tqdm==4.66.2  # Progress bars for dataset processing
 ffmpeg-python==0.2.0  # Whisper audio conversion wrapper
 apscheduler==3.10.4  # In-memory background task scheduling
+boto3==1.34.69  # Optional Cloudflare R2/S3-compatible upload storage
 
 # [Dev + Testing]
 pytest==8.1.0  # Core testing framework

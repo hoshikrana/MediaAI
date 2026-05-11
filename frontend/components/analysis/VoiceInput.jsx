@@ -9,7 +9,6 @@ export default function VoiceInput({ onTranscribed }) {
     const [transcribedText, setTranscribedText] = useState("")
     const [confidence, setConfidence] = useState(null)
     const [error, setError] = useState(null)
-    const [audioBlob, setAudioBlob] = useState(null)
     
     const mediaRecorderRef = useRef(null)
     const chunksRef = useRef([])
@@ -25,7 +24,6 @@ export default function VoiceInput({ onTranscribed }) {
             mediaRecorder.ondataavailable = e => chunksRef.current.push(e.data)
             mediaRecorder.onstop = () => {
                 const blob = new Blob(chunksRef.current, { type: "audio/webm" })
-                setAudioBlob(blob)
                 sendForTranscription(blob)
                 stream.getTracks().forEach(track => track.stop())
             }
@@ -78,7 +76,6 @@ export default function VoiceInput({ onTranscribed }) {
     const handleReset = () => {
         setTranscribedText("")
         setConfidence(null)
-        setAudioBlob(null)
         setRecordingDuration(0)
     }
 
@@ -115,7 +112,7 @@ export default function VoiceInput({ onTranscribed }) {
                 <div className="space-y-4">
                     <div className="p-3 bg-white border rounded">
                         <p className="text-gray-800 animate-[typewriter_0.5s_steps(40,end)] overflow-hidden break-words">
-                            "{transcribedText}"
+                            &quot;{transcribedText}&quot;
                         </p>
                         <div className="flex items-center mt-2 text-xs">
                             <span className={confidence > 0.8 ? "text-green-600" : "text-yellow-600"}>

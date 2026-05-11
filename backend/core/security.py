@@ -2,10 +2,10 @@ import hashlib
 import secrets
 import asyncio
 import re
-from datetime import datetime, timedelta, UTC
+from datetime import datetime, timedelta, timezone
 from typing import Literal, Tuple, List, Dict
 from jose import jwt, JWTError, ExpiredSignatureError
-from passlib.context import CryptContext
+import bcrypt
 from pydantic import BaseModel
 from fastapi import Response, Request
 
@@ -14,18 +14,16 @@ from backend.core.exceptions import (
     ExpiredTokenError, InvalidTokenError, BlacklistedTokenError, AuthenticationError
 )
 
-# 1. Password Context
-pwd_context = CryptContext(
-    schemes=["bcrypt"],
-    deprecated="auto",
-    bcrypt__rounds=12
-)
-
+# 1. Password Hashing
 def hash_password(plain: str) -> str:
-    return pwd_context.hash(plain)
+    salt = bcrypt.gensalt(rounds=12)
+    return bcrypt.hashpw(plain.encode("utf-8"), salt).decode("utf-8")
 
 def verify_password(plain: str, hashed: str) -> bool:
-    return pwd_context.verify(plain, hashed)
+    try:
+        return bcrypt.checkpw(plain.encode("utf-8"), hashed.encode("utf-8"))
+    except Exception:
+        return False
 
 def validate_password_strength(password: str) -> List[str]:
     """Returns list of failure reasons. Empty list = strong password."""
@@ -53,7 +51,7 @@ class TokenPayload(BaseModel):
 # 3 & 4. Token Creation
 def create_token(user_id: str, token_type: Literal["access", "refresh"], extra_claims: dict = None) -> str:
     claims = extra_claims or {}
-    now = datetime.now(UTC)
+    now = datetime.now(timezone.utc)
     
     if token_type == "access":
         expires_delta = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
@@ -106,7 +104,7 @@ def is_token_blacklisted(jti: str) -> bool:
 
 async def cleanup_expired_blacklist() -> int:
     """Call hourly from scheduler. Returns count of removed entries."""
-    now = datetime.now(UTC)
+    now = datetime.now(timezone.utc)
     async with _blacklist_lock:
         expired = [jti for jti, exp in _blacklist.items() if exp < now]
         for jti in expired:

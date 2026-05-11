@@ -35,9 +35,10 @@ class ImageValidator:
     
     @staticmethod
     async def validate(file: UploadFile) -> ImageMetadata:
-        content = await file.read(ImageValidator.MAX_SIZE_BYTES + 1)
-        if len(content) > ImageValidator.MAX_SIZE_BYTES:
-            raise FileTooLargeError(f"Max file size is {ImageValidator.MAX_SIZE_BYTES//1024//1024}MB")
+        max_size = settings.max_upload_bytes
+        content = await file.read(max_size + 1)
+        if len(content) > max_size:
+            raise FileTooLargeError(f"Max file size is {settings.MAX_UPLOAD_SIZE_MB}MB")
         await file.seek(0)
         
         # Verify Mime via Magic Bytes

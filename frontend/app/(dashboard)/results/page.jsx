@@ -1,10 +1,11 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
 import { Download, MessageSquare, UploadCloud, AlertTriangle, AlertCircle, Loader2 } from 'lucide-react'
 import { useAnalysisStatus } from '@/lib/hooks/useAnalysisStatus'
 import ProtectedRoute from '@/components/auth/ProtectedRoute'
+import { apiClient } from '@/lib/api/client'
 
 export default function ResultsDashboard() {
     const searchParams = useSearchParams()
@@ -12,8 +13,10 @@ export default function ResultsDashboard() {
     const taskId = searchParams.get('task_id')
     const sessionId = searchParams.get('session_id')
     
-    const { status, result, error, queuePosition, estimatedWait } = useAnalysisStatus(taskId)
+    const { status, result, error, queuePosition, estimatedWait } = useAnalysisStatus(taskId, sessionId)
     const [viewMode, setViewMode] = useState('overlay') // original, heatmap, overlay
+    const [pdfLoading, setPdfLoading] = useState(false)
+    const [pdfError, setPdfError] = useState(null)
 
     if (error) {
         return (
@@ -57,6 +60,27 @@ export default function ResultsDashboard() {
 
     const { vision, nlp, fusion, report_text, warnings, timings } = result
 
+    const downloadReport = async () => {
+        setPdfLoading(true)
+        setPdfError(null)
+        try {
+            const response = await apiClient.get(`/api/v1/report/${sessionId}`, { responseType: 'blob', timeout: 30000 })
+            const url = URL.createObjectURL(response.data)
+            const link = document.createElement('a')
+            link.href = url
+            link.download = `medsight_report_${sessionId?.slice(0, 8) || 'analysis'}.pdf`
+            document.body.appendChild(link)
+            link.click()
+            link.remove()
+            URL.revokeObjectURL(url)
+        } catch (err) {
+            console.error("PDF download failed:", err)
+            setPdfError("Failed to generate PDF. Please try again.")
+        } finally {
+            setPdfLoading(false)
+        }
+    }
+
     // Derived styles
     const isHighRisk = vision?.risk_level === "HIGH" || fusion?.final_risk === "HIGH"
     const isMediumRisk = vision?.risk_level === "MEDIUM" || fusion?.final_risk === "MEDIUM"
@@ -66,13 +90,6 @@ export default function ResultsDashboard() {
         : isMediumRisk 
         ? "bg-gradient-to-r from-amber-900/80 to-amber-800/80 border-amber-500/50"
         : "bg-gradient-to-r from-teal-900/80 to-teal-800/80 border-teal-500/50"
-
-    const highlightText = (text, rawEntities) => {
-        if (!text || !rawEntities) return { __html: text }
-        // For simplicity, returning plain text if custom dangerouslySetInnerHTML function highlight_entities isn't imported
-        // Assume highlight_entities is imported from a utils file in a real build
-        return { __html: text } 
-    }
 
     return (
         <ProtectedRoute>
@@ -128,16 +145,16 @@ export default function ResultsDashboard() {
                         
                         <div className="relative flex-1 bg-black rounded-xl overflow-hidden min-h-[300px] flex items-center justify-center border border-navy-600">
                             {vision?.heatmap_base64 ? (
-                                <img 
-                                    src={vision.heatmap_base64} 
-                                    alt="Analysis Result" 
-                                    className="max-w-full max-h-full object-contain"
-                                    style={{
-                                        // The base64 from backend contains a 3-panel image (Original|Heatmap|Overlay).
-                                        // A real frontend would slice it using CSS object-position, or the backend would return them separately.
-                                        // For this demo, we assume the backend handles the view state or we just show the full panel.
-                                    }}
-                                />
+                                <div className="absolute inset-0 w-full h-full overflow-hidden">
+                                    <img 
+                                        src={vision.heatmap_base64} 
+                                        alt={`Analysis Result - ${viewMode}`} 
+                                        className="absolute h-full w-[300%] max-w-none object-cover transition-transform duration-500 ease-in-out origin-left"
+                                        style={{
+                                            transform: `translateX(-${viewMode === 'original' ? 0 : viewMode === 'heatmap' ? 33.333 : 66.666}%)`
+                                        }}
+                                    />
+                                </div>
                             ) : (
                                 <p className="text-gray-500">Image analysis unavailable</p>
                             )}
@@ -210,8 +227,8 @@ export default function ResultsDashboard() {
                     </div>
 
                     <div className="flex flex-wrap gap-4 pt-6 border-t border-navy-700">
-                        <button className="flex items-center gap-2 px-6 py-2.5 bg-navy-700 text-white rounded-lg hover:bg-navy-600 border border-navy-600 transition">
-                            <Download className="w-4 h-4" /> Download PDF
+                        <button onClick={downloadReport} disabled={pdfLoading} className="flex items-center gap-2 px-6 py-2.5 bg-navy-700 text-white rounded-lg hover:bg-navy-600 border border-navy-600 transition disabled:opacity-50">
+                            {pdfLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />} {pdfLoading ? 'Generating...' : 'Download PDF'}
                         </button>
                         <button onClick={() => router.push(`/chat?session_id=${sessionId}`)} className="flex items-center gap-2 px-6 py-2.5 bg-teal-600 text-white rounded-lg hover:bg-teal-500 shadow transition">
                             <MessageSquare className="w-4 h-4" /> Discuss Findings with AI
@@ -220,6 +237,9 @@ export default function ResultsDashboard() {
                             <UploadCloud className="w-4 h-4" /> New Scan
                         </button>
                     </div>
+                    {pdfError && (
+                        <p className="text-sm text-red-400 mt-2">{pdfError}</p>
+                    )}
                 </motion.div>
             </div>
         </ProtectedRoute>

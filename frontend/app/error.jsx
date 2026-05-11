@@ -1,6 +1,6 @@
 'use client'
 import { useEffect } from 'react'
-import { Brain, AlertCircle } from 'lucide-react'
+import { AlertCircle, RefreshCw, Home } from 'lucide-react'
 import Link from 'next/link'
 
 export default function Error({ error, reset }) {
@@ -10,27 +10,25 @@ export default function Error({ error, reset }) {
 
     return (
         <div className="flex flex-col items-center justify-center min-h-[80vh] text-center px-4">
-            <Brain className="w-16 h-16 text-navy-700 mb-6" />
-            <div className="flex items-center space-x-2 text-red-400 mb-4">
-                <AlertCircle className="w-6 h-6" />
-                <h2 className="text-2xl font-bold">Something went wrong!</h2>
-            </div>
-            <p className="text-gray-400 max-w-md mb-8">
-                {error.message || "An unexpected error occurred in the application layer."}
-            </p>
-            <div className="flex space-x-4">
-                <button
-                    onClick={() => reset()}
-                    className="px-6 py-2 bg-navy-700 text-white rounded hover:bg-navy-600 transition"
-                >
-                    Try Again
-                </button>
-                <Link
-                    href="/"
-                    className="px-6 py-2 bg-teal-600 text-white rounded hover:bg-teal-700 transition"
-                >
-                    Go Home
-                </Link>
+            <div className="glass-card p-10 max-w-md w-full">
+                <div className="w-16 h-16 rounded-2xl bg-red-500/10 flex items-center justify-center mx-auto mb-6">
+                    <AlertCircle className="w-8 h-8 text-red-400" />
+                </div>
+                <h2 className="text-2xl font-bold text-white mb-2">Something went wrong</h2>
+                <p className="text-gray-400 text-sm mb-8 leading-relaxed">
+                    {error?.message || "An unexpected error occurred in the application."}
+                </p>
+                <div className="flex gap-3 justify-center">
+                    <button
+                        onClick={() => reset()}
+                        className="btn-secondary flex items-center gap-2 text-sm"
+                    >
+                        <RefreshCw className="w-4 h-4" /> Try Again
+                    </button>
+                    <Link href="/" className="btn-primary flex items-center gap-2 text-sm">
+                        <Home className="w-4 h-4" /> Go Home
+                    </Link>
+                </div>
             </div>
         </div>
     )

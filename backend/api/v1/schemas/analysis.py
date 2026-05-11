@@ -35,6 +35,7 @@ class BoundingBox(BaseModel):
     confidence: float
 
 class VisionResult(BaseModel):
+    model_config = {'protected_namespaces': ()}
     anomaly_score: float
     risk_level: Literal["LOW", "MEDIUM", "HIGH"]
     heatmap_base64: Optional[str] = None

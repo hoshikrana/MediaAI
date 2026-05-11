@@ -1,6 +1,6 @@
 import hashlib
 import secrets
-from datetime import datetime, UTC
+from datetime import datetime, timezone
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from backend.db.models import APIKey
@@ -25,7 +25,7 @@ async def verify_api_key(plain_key: str, db: AsyncSession) -> APIKey | None:
     
     if not api_key:
         return None
-    if api_key.expires_at and api_key.expires_at < datetime.now(UTC).replace(tzinfo=None):
+    if api_key.expires_at and api_key.expires_at < datetime.now(timezone.utc).replace(tzinfo=None):
         return None
         
     return api_key
@@ -36,7 +36,7 @@ class APIKeyRateLimiter:
         self._counters: dict[str, dict] = {}
         
     async def check_and_increment(self, key_id: str, limit: int) -> bool:
-        current_hour = datetime.now(UTC).strftime("%Y-%m-%dT%H")
+        current_hour = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H")
         
         if key_id not in self._counters or self._counters[key_id]["hour"] != current_hour:
             self._counters[key_id] = {"hour": current_hour, "count": 0}
@@ -48,7 +48,7 @@ class APIKeyRateLimiter:
         return True
         
     def get_remaining(self, key_id: str, limit: int) -> int:
-        current_hour = datetime.now(UTC).strftime("%Y-%m-%dT%H")
+        current_hour = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H")
         if key_id not in self._counters or self._counters[key_id]["hour"] != current_hour:
             return limit
         return max(0, limit - self._counters[key_id]["count"])

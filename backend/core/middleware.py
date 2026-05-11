@@ -1,9 +1,15 @@
+import uuid
+import time
+import logging
 from fastapi import Request, Response
 from fastapi.responses import JSONResponse, RedirectResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 from slowapi import Limiter
 from slowapi.errors import RateLimitExceeded
 from backend.core.config import settings
+from backend.core.logging_config import _request_id_var
+
+logger = logging.getLogger("access")
 
 class HTTPSRedirectMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
@@ -36,8 +42,10 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             )
         
         # Remove headers that leak server info:
-        response.headers.pop("Server", None)
-        response.headers.pop("X-Powered-By", None)
+        if "Server" in response.headers:
+            del response.headers["Server"]
+        if "X-Powered-By" in response.headers:
+            del response.headers["X-Powered-By"]
         
         return response
 
@@ -69,3 +77,31 @@ async def rate_limit_handler(request: Request, exc: RateLimitExceeded) -> Respon
         },
         headers={"Retry-After": str(retry_after)}
     )
+
+class RequestIDMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        request_id = request.headers.get("X-Request-ID", str(uuid.uuid4()))
+        _request_id_var.set(request_id)
+        request.state.request_id = request_id
+        
+        response = await call_next(request)
+        response.headers["X-Request-ID"] = request_id
+        return response
+
+class AccessLogMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        start_time = time.monotonic()
+        response = await call_next(request)
+        duration = int((time.monotonic() - start_time) * 1000)
+        
+        logger.info(
+            f"{request.method} {request.url.path} - {response.status_code} ({duration}ms)",
+            extra={
+                "method": request.method,
+                "path": request.url.path,
+                "status_code": response.status_code,
+                "duration_ms": duration,
+                "client_ip": request.client.host if request.client else "unknown"
+            }
+        )
+        return response

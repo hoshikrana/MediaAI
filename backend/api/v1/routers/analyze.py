@@ -1,4 +1,5 @@
 import asyncio
+from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, Form, File, UploadFile, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from pathlib import Path
@@ -6,15 +7,18 @@ from pathlib import Path
 from backend.db.session import get_db
 from backend.db.models import AnalysisSession, AnalysisTask
 from backend.core.dependencies import get_current_user, get_pagination, get_model_registry
+from backend.core.config import settings
 from backend.core.exceptions import InvalidFileTypeError, FileTooLargeError, ModelNotLoadedError
 from backend.utils.validators import ImageValidator, sanitize_symptoms_text, validate_patient_id, safe_temp_path
+from backend.utils.file_storage import FileStorage
 from backend.api.v1.schemas.analysis import TaskSubmitResponse, TaskStatusResponse, AnalysisResult
 from backend.orchestration.queue import task_queue
 from backend.ml.nlp.whisper import WhisperTranscriber
 
 router = APIRouter()
 
-@router.post("/", response_model=TaskSubmitResponse)
+@router.post("", response_model=TaskSubmitResponse)
+@router.post("/", response_model=TaskSubmitResponse, include_in_schema=False)
 async def analyze_submission(
     request: Request,
     image: UploadFile = File(...),
@@ -33,15 +37,16 @@ async def analyze_submission(
     temp_path = safe_temp_path(img_meta.filename)
     with open(temp_path, "wb") as f:
         f.write(img_meta.content)
+    stored_file = FileStorage.save_upload(img_meta.content, img_meta.filename, current_user.id)
         
     session = AnalysisSession(
         user_id=current_user.id,
         patient_id=clean_patient_id,
         status="PENDING",
         image_filename=img_meta.filename,
-        image_hash="hash_placeholder", # Ideally use hashlib
+        image_hash=stored_file.sha256,
         symptoms_text=clean_symptoms,
-        # Set expiry for DB cleanup
+        expires_at=datetime.now(timezone.utc) + timedelta(days=settings.ANALYSIS_RETENTION_DAYS),
     )
     db.add(session)
     await db.commit()
@@ -63,16 +68,22 @@ async def analyze_submission(
 async def get_status(task_id: str, current_user = Depends(get_current_user)):
     return await task_queue.get_status(task_id)
 
-@router.get("/result/{task_id}")
-async def get_result(task_id: str, db: AsyncSession = Depends(get_db), current_user = Depends(get_current_user)):
-    status_data = await task_queue.get_status(task_id)
-    if status_data["status"] != "COMPLETED":
-        return {"status": status_data["status"], "message": "Analysis still in progress"}
-        
-    session = await db.get(AnalysisSession, status_data["session_id"])
+@router.get("/result/{result_id}")
+async def get_result(result_id: str, db: AsyncSession = Depends(get_db), current_user = Depends(get_current_user)):
+    task = await db.get(AnalysisTask, result_id)
+    if task:
+        if task.status != "COMPLETED":
+            return {"status": task.status, "message": "Analysis still in progress"}
+        session = await db.get(AnalysisSession, task.session_id)
+    else:
+        session = await db.get(AnalysisSession, result_id)
+
     if not session or session.user_id != current_user.id:
         raise HTTPException(status_code=403, detail="Not authorized")
-        
+
+    if session.status != "READY":
+        return {"status": session.status, "message": "Analysis still in progress"}
+
     return session.result_json
 
 @router.delete("/{task_id}")

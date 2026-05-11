@@ -1,6 +1,6 @@
 import os
 from pathlib import Path
-from typing import Literal
+from typing import Literal, Any
 from pydantic import field_validator, computed_field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -18,7 +18,8 @@ class Settings(BaseSettings):
     SECRET_KEY: str
     DEBUG: bool = False
     VERSION: str = "1.0.0"
-    ALLOWED_ORIGINS: list[str] = ["http://localhost:3000"]
+    ALLOWED_ORIGINS: Any = ["http://localhost:3000"]
+    TRUSTED_HOSTS: Any = ["localhost", "127.0.0.1", "*.vercel.app"]
     FRONTEND_URL: str = "http://localhost:3000"
     BACKEND_URL: str = "http://localhost:8000"
 
@@ -41,10 +42,21 @@ class Settings(BaseSettings):
     HF_TOKEN: str = ""
 
     # === ML Config ===
-    MODEL_CACHE_DIR: Path = Path("C:/hf_cache")
+    LOAD_ML_MODELS: bool = True
+    MODEL_CACHE_DIR: Path = Path("./models/cache")
     TEMP_DIR: Path = Path("./backend/temp")
     MAX_UPLOAD_SIZE_MB: int = 10
     GPU_VRAM_BUDGET_MB: int = 3500
+    ANALYSIS_RETENTION_DAYS: int = 7
+
+    # === Object Storage (optional; local storage is used when disabled) ===
+    STORAGE_BACKEND: Literal["local", "r2"] = "local"
+    LOCAL_STORAGE_DIR: Path = Path("./data/uploads")
+    R2_ENDPOINT_URL: str = ""
+    R2_ACCESS_KEY_ID: str = ""
+    R2_SECRET_ACCESS_KEY: str = ""
+    R2_BUCKET_NAME: str = ""
+    R2_PUBLIC_BASE_URL: str = ""
 
     # === Rate Limiting ===
     RATE_LIMIT_ANALYZE: str = "10/hour"
@@ -54,6 +66,13 @@ class Settings(BaseSettings):
     # === Logging ===
     LOG_LEVEL: str = "DEBUG"
     LOG_DIR: Path = Path("./backend/logs")
+
+    @field_validator("ALLOWED_ORIGINS", "TRUSTED_HOSTS", mode="before")
+    @classmethod
+    def parse_csv_list(cls, v):
+        if isinstance(v, str):
+            return [item.strip() for item in v.split(",") if item.strip()]
+        return v
 
     @field_validator("SECRET_KEY")
     @classmethod
@@ -94,6 +113,7 @@ def startup_validation():
         settings.TEMP_DIR.mkdir(parents=True, exist_ok=True)
         settings.LOG_DIR.mkdir(parents=True, exist_ok=True)
         settings.MODEL_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        settings.LOCAL_STORAGE_DIR.mkdir(parents=True, exist_ok=True)
     except PermissionError:
         errors.append("Lack permissions to create required directories (temp, logs, cache).")
 
@@ -105,6 +125,18 @@ def startup_validation():
             errors.append("GOOGLE_CLIENT_ID is required in production.")
         if settings.DEBUG:
             errors.append("DEBUG mode must be False in production.")
+        if settings.STORAGE_BACKEND == "r2":
+            missing_r2 = [
+                name for name in (
+                    "R2_ENDPOINT_URL",
+                    "R2_ACCESS_KEY_ID",
+                    "R2_SECRET_ACCESS_KEY",
+                    "R2_BUCKET_NAME",
+                )
+                if not getattr(settings, name)
+            ]
+            if missing_r2:
+                errors.append(f"Missing R2 settings: {', '.join(missing_r2)}")
 
     if errors:
         raise RuntimeError("Startup Validation Failed:\n" + "\n".join(errors))

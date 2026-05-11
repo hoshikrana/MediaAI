@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from pathlib import Path
+import asyncio
 import os
 
 from backend.db.session import get_db
@@ -36,17 +37,39 @@ async def download_report(
     if session.status != "READY":
         raise HTTPException(status_code=400, detail="Report not ready yet")
         
-    temp_pdf_path = safe_temp_path(f"report_{session_id}.pdf")
+    # Create permanent PDF directory
+    pdf_dir = Path("backend/uploads/pdfs")
+    pdf_dir.mkdir(parents=True, exist_ok=True)
     
-    # Generate blocking PDF creation in a thread to not block ASGI
-    import asyncio
-    await asyncio.to_thread(MedicalReportGenerator.generate, session.__dict__, temp_pdf_path)
+    # If the PDF hasn't been generated yet, create it permanently
+    if not session.pdf_filename:
+        safe_filename = f"medsight_report_{session_id}.pdf"
+        permanent_pdf_path = pdf_dir / safe_filename
+        
+        # Build a clean session data dict
+        session_data = {
+            "id": session.id,
+            "patient_id": session.patient_id,
+            "status": session.status,
+            "result_json": session.result_json or {},
+            "risk_level": session.risk_level,
+        }
+        await asyncio.to_thread(MedicalReportGenerator.generate, session_data, str(permanent_pdf_path))
+        
+        # Save to DB
+        session.pdf_filename = safe_filename
+        await db.commit()
     
-    background_tasks.add_task(cleanup_file, str(temp_pdf_path))
+    pdf_path = pdf_dir / session.pdf_filename
+    
+    if not pdf_path.exists():
+        # Fallback if file was deleted
+        session.pdf_filename = None
+        await db.commit()
+        raise HTTPException(status_code=404, detail="PDF file was lost from disk. Please request again to regenerate.")
     
     return FileResponse(
-        path=str(temp_pdf_path),
+        path=str(pdf_path),
         media_type="application/pdf",
-        filename=f"medsight_report_{session_id[:8]}.pdf",
-        headers={"Cache-Control": "no-store"}
+        filename=f"medsight_report_{session_id[:8]}.pdf"
     )

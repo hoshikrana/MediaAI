@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
-import { Brain, AlertCircle, FileText, ChevronRight } from 'lucide-react'
+import { Brain, AlertCircle, ChevronRight } from 'lucide-react'
 import ChatInterface from '@/components/chat/ChatInterface'
 import ProtectedRoute from '@/components/auth/ProtectedRoute'
 import { apiClient } from '@/lib/api/client'

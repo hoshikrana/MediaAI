@@ -1,50 +1,69 @@
 'use client'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Brain, Menu, X, User as UserIcon } from 'lucide-react'
-import { useState } from 'react'
+import { Brain, Menu, X, LogOut, Key, Settings } from 'lucide-react'
+import { useState, useEffect, useRef } from 'react'
 import { useAuth } from '@/lib/auth/AuthContext'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
 
 export default function Navbar() {
     const { user, isAuthenticated, logout } = useAuth()
     const pathname = usePathname()
     const [mobileOpen, setMobileOpen] = useState(false)
+    const [dropdownOpen, setDropdownOpen] = useState(false)
+    const [scrolled, setScrolled] = useState(false)
+    const dropdownRef = useRef(null)
+
+    useEffect(() => {
+        const handler = () => setScrolled(window.scrollY > 20)
+        window.addEventListener('scroll', handler)
+        return () => window.removeEventListener('scroll', handler)
+    }, [])
+
+    useEffect(() => {
+        const handler = (e) => {
+            if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
+                setDropdownOpen(false)
+            }
+        }
+        document.addEventListener('mousedown', handler)
+        return () => document.removeEventListener('mousedown', handler)
+    }, [])
 
     const navLinks = [
         { name: 'Home', href: '/' },
         { name: 'Upload', href: '/upload' },
         { name: 'History', href: '/history' },
-        { name: 'About', href: '/about' },
+        { name: 'Architecture', href: '/about' },
     ]
 
     return (
-        <nav className="fixed top-0 left-0 right-0 z-50 w-full border-b border-navy-700 bg-navy-900/80 backdrop-blur-md">
+        <nav className={`fixed top-0 left-0 right-0 z-50 w-full transition-all duration-300 ${
+            scrolled
+                ? 'bg-navy-900/90 backdrop-blur-xl border-b border-navy-700/50 shadow-lg shadow-navy-950/50'
+                : 'bg-transparent border-b border-transparent'
+        }`}>
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                 <div className="flex items-center justify-between h-16">
                     {/* Logo */}
-                    <Link href="/" className="flex items-center space-x-2">
-                        <Brain className="w-8 h-8 text-teal-500" />
-                        <span className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-teal-400">
+                    <Link href="/" className="flex items-center space-x-2.5 group">
+                        <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-teal-400 to-teal-500 flex items-center justify-center shadow-lg group-hover:shadow-teal-500/20 transition-shadow duration-300">
+                            <Brain className="w-5 h-5 text-navy-900" />
+                        </div>
+                        <span className="text-lg font-bold tracking-tight gradient-text">
                             MedSight AI
                         </span>
                     </Link>
 
                     {/* Desktop Links */}
-                    <div className="hidden md:flex items-center space-x-8">
+                    <div className="hidden md:flex items-center gap-1">
                         {navLinks.map((link) => (
-                            <Link 
-                                key={link.name} 
+                            <Link
+                                key={link.name}
                                 href={link.href}
-                                className={`text-sm font-medium transition-colors hover:text-teal-400 ${
-                                    pathname === link.href ? 'text-teal-500 border-b-2 border-teal-500 pb-1' : 'text-gray-300'
+                                className={`px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${
+                                    pathname === link.href
+                                        ? 'text-teal-400 bg-teal-500/10'
+                                        : 'text-gray-400 hover:text-white hover:bg-white/5'
                                 }`}
                             >
                                 {link.name}
@@ -53,48 +72,55 @@ export default function Navbar() {
                     </div>
 
                     {/* Desktop Auth */}
-                    <div className="hidden md:flex items-center space-x-4">
+                    <div className="hidden md:flex items-center gap-3">
                         {isAuthenticated ? (
-                            <DropdownMenu>
-                                <DropdownMenuTrigger className="focus:outline-none" data-testid="user-menu">
-                                    <div className="flex items-center justify-center w-9 h-9 rounded-full bg-navy-700 hover:bg-navy-600 border border-navy-600 transition" data-testid="navbar-user">
-                                        <span className="text-sm font-medium text-teal-400">
-                                            {user?.full_name?.charAt(0) || 'U'}
-                                        </span>
-                                    </div>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end" className="w-56 bg-navy-800 border-navy-600 text-white">
-                                    <DropdownMenuLabel className="font-normal">
-                                        <div className="flex flex-col space-y-1">
-                                            <p className="text-sm font-medium leading-none">{user?.full_name}</p>
-                                            <p className="text-xs leading-none text-gray-400">{user?.email}</p>
+                            <div className="relative" ref={dropdownRef}>
+                                <button
+                                    onClick={() => setDropdownOpen(!dropdownOpen)}
+                                    className="flex items-center justify-center w-9 h-9 rounded-xl bg-navy-800 hover:bg-navy-700 border border-navy-600/50 transition-all duration-200"
+                                    data-testid="user-menu"
+                                >
+                                    <span className="text-sm font-bold text-teal-400">
+                                        {user?.full_name?.charAt(0) || 'U'}
+                                    </span>
+                                </button>
+
+                                {dropdownOpen && (
+                                    <div className="absolute right-0 mt-2 w-56 glass-card p-1.5 shadow-2xl animate-fade-in-up" style={{ animationDuration: '0.15s' }}>
+                                        <div className="px-3 py-2.5 mb-1">
+                                            <p className="text-sm font-semibold text-white truncate">{user?.full_name}</p>
+                                            <p className="text-xs text-gray-400 truncate">{user?.email}</p>
                                         </div>
-                                    </DropdownMenuLabel>
-                                    <DropdownMenuSeparator className="bg-navy-700" />
-                                    <DropdownMenuItem className="cursor-pointer hover:bg-navy-700" asChild>
-                                        <Link href="/profile">Profile Settings</Link>
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem className="cursor-pointer hover:bg-navy-700" asChild>
-                                        <Link href="/profile/api-keys">API Keys</Link>
-                                    </DropdownMenuItem>
-                                    <DropdownMenuSeparator className="bg-navy-700" />
-                                    <DropdownMenuItem className="cursor-pointer text-red-400 hover:bg-navy-700 hover:text-red-300" onClick={logout} data-testid="logout-button">
-                                        Log out
-                                    </DropdownMenuItem>
-                                </DropdownMenuContent>
-                            </DropdownMenu>
+                                        <div className="h-px bg-navy-600/50 mx-2" />
+                                        <Link href="/profile" onClick={() => setDropdownOpen(false)} className="flex items-center gap-2.5 px-3 py-2 text-sm text-gray-300 hover:text-white hover:bg-navy-700/50 rounded-lg transition-colors mt-1">
+                                            <Settings className="w-4 h-4" /> Profile Settings
+                                        </Link>
+                                        <Link href="/profile/api-keys" onClick={() => setDropdownOpen(false)} className="flex items-center gap-2.5 px-3 py-2 text-sm text-gray-300 hover:text-white hover:bg-navy-700/50 rounded-lg transition-colors">
+                                            <Key className="w-4 h-4" /> API Keys
+                                        </Link>
+                                        <div className="h-px bg-navy-600/50 mx-2 my-1" />
+                                        <button
+                                            onClick={() => { logout(); setDropdownOpen(false); }}
+                                            className="flex items-center gap-2.5 w-full px-3 py-2 text-sm text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-lg transition-colors"
+                                            data-testid="logout-button"
+                                        >
+                                            <LogOut className="w-4 h-4" /> Log out
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
                         ) : (
                             <>
-                                <Link href="/login" className="text-sm font-medium text-gray-300 hover:text-white transition">Log in</Link>
-                                <Link href="/register" className="px-4 py-2 text-sm font-medium text-navy-900 bg-teal-500 rounded hover:bg-teal-400 transition">Get Started</Link>
+                                <Link href="/login" className="text-sm font-medium text-gray-400 hover:text-white transition px-3 py-2">Log in</Link>
+                                <Link href="/register" className="btn-primary text-sm !py-2 !px-5">Get Started</Link>
                             </>
                         )}
                     </div>
 
                     {/* Mobile Menu Button */}
-                    <div className="md:hidden flex items-center">
-                        <button onClick={() => setMobileOpen(!mobileOpen)} className="text-gray-300 hover:text-white">
-                            {mobileOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+                    <div className="md:hidden">
+                        <button onClick={() => setMobileOpen(!mobileOpen)} className="p-2 text-gray-400 hover:text-white rounded-lg hover:bg-white/5 transition">
+                            {mobileOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
                         </button>
                     </div>
                 </div>
@@ -102,26 +128,29 @@ export default function Navbar() {
 
             {/* Mobile Drawer */}
             {mobileOpen && (
-                <div className="md:hidden bg-navy-800 border-b border-navy-700">
-                    <div className="px-2 pt-2 pb-3 space-y-1">
+                <div className="md:hidden bg-navy-900/95 backdrop-blur-xl border-t border-navy-700/50">
+                    <div className="px-4 py-4 space-y-1">
                         {navLinks.map((link) => (
                             <Link
                                 key={link.name}
                                 href={link.href}
                                 onClick={() => setMobileOpen(false)}
-                                className={`block px-3 py-2 rounded-md text-base font-medium ${
-                                    pathname === link.href ? 'bg-navy-700 text-teal-400' : 'text-gray-300 hover:bg-navy-700 hover:text-white'
+                                className={`block px-4 py-2.5 rounded-xl text-base font-medium transition-all ${
+                                    pathname === link.href
+                                        ? 'bg-teal-500/10 text-teal-400'
+                                        : 'text-gray-300 hover:bg-white/5 hover:text-white'
                                 }`}
                             >
                                 {link.name}
                             </Link>
                         ))}
+                        <div className="h-px bg-navy-700/50 my-2" />
                         {isAuthenticated ? (
-                            <button onClick={() => { logout(); setMobileOpen(false); }} className="block w-full text-left px-3 py-2 rounded-md text-base font-medium text-red-400 hover:bg-navy-700">
+                            <button onClick={() => { logout(); setMobileOpen(false); }} className="block w-full text-left px-4 py-2.5 rounded-xl text-base font-medium text-red-400 hover:bg-red-500/10 transition">
                                 Log out
                             </button>
                         ) : (
-                            <Link href="/login" onClick={() => setMobileOpen(false)} className="block px-3 py-2 rounded-md text-base font-medium text-gray-300 hover:bg-navy-700">
+                            <Link href="/login" onClick={() => setMobileOpen(false)} className="block px-4 py-2.5 rounded-xl text-base font-medium text-gray-300 hover:bg-white/5">
                                 Log in
                             </Link>
                         )}

@@ -54,6 +54,8 @@ data/processed/*
 !data/processed/.gitkeep
 data/chromadb/*
 !data/chromadb/.gitkeep
+data/uploads/*
+!data/uploads/.gitkeep
 models/*
 !models/.gitkeep
 
@@ -67,6 +69,8 @@ $RECYCLE.BIN/
 # Application Specific
 logs/*.log
 !logs/.gitkeep
+backend/logs/*.log
+!backend/logs/.gitkeep
 backend/temp/*
 !backend/temp/.gitkeep
 *.sqlite3

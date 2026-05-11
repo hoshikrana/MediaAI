@@ -11,82 +11,100 @@ class NERExtractor:
     }
     
     @staticmethod
-    def extract(text: str, model: AutoModelForTokenClassification, tokenizer: AutoTokenizer, device: str = "cuda") -> NERResult:
+    def extract_fallback(text: str) -> NERResult:
+        import re
+
+        if not text or not text.strip():
+            return NERResult(diseases=[], symptoms=[], medications=[], anatomy=[], raw_entities=[])
+
+        vocab = {
+            "diseases": [
+                "pneumonia", "pleural effusion", "cardiomegaly", "atelectasis",
+                "pneumothorax", "tuberculosis", "covid-19", "bronchitis",
+                "asthma", "pulmonary edema", "fibrosis", "emphysema",
+            ],
+            "symptoms": [
+                "chest pain", "shortness of breath", "dyspnea", "fever", "cough",
+                "fatigue", "wheezing", "night sweats", "weight loss", "sputum",
+            ],
+            "medications": [
+                "albuterol", "amoxicillin", "azithromycin", "steroid", "inhaler",
+                "antibiotic", "aspirin", "warfarin",
+            ],
+            "anatomy": ["chest", "lung", "lungs", "pleura", "heart", "rib", "diaphragm"],
+        }
+        label_map = {
+            "diseases": "DISEASE",
+            "symptoms": "SYMPTOM",
+            "medications": "MEDICATION",
+            "anatomy": "ANATOMY",
+        }
+
+        grouped = {key: [] for key in vocab}
+        raw_entities = []
+        for group, terms in vocab.items():
+            for term in terms:
+                for match in re.finditer(rf"\b{re.escape(term)}\b", text, flags=re.IGNORECASE):
+                    matched = text[match.start():match.end()]
+                    if matched.lower() not in {item.lower() for item in grouped[group]}:
+                        grouped[group].append(matched)
+                    raw_entities.append({
+                        "text": matched,
+                        "entity_type": label_map[group],
+                        "confidence": 0.72,
+                        "start": match.start(),
+                        "end": match.end(),
+                    })
+
+        return NERResult(
+            diseases=grouped["diseases"],
+            symptoms=grouped["symptoms"],
+            medications=grouped["medications"],
+            anatomy=grouped["anatomy"],
+            raw_entities=raw_entities,
+        )
+
+    @staticmethod
+    def extract(text: str, nlp_model: any) -> NERResult:
         if not text or not text.strip():
             return NERResult(diseases=[], symptoms=[], medications=[], anatomy=[], raw_entities=[])
             
-        chunks = NERExtractor._chunk_text(text, tokenizer, max_length=400, overlap=50)
+        if nlp_model is None:
+            return NERExtractor.extract_fallback(text)
+            
+        doc = nlp_model(text)
         
-        all_entities = []
-        seen_spans = set()
-        
-        for chunk_text, char_offset in chunks:
-            chunk_entities = NERExtractor._extract_chunk(chunk_text, model, tokenizer, device, char_offset)
-            for entity in chunk_entities:
-                span_key = (entity["text"].lower(), entity["entity_type"])
-                if span_key not in seen_spans:
-                    seen_spans.add(span_key)
-                    all_entities.append(entity)
-                    
         grouped = {"diseases": [], "symptoms": [], "medications": [], "anatomy": []}
-        for entity in all_entities:
-            entity_type = entity["entity_type"].split("-")[-1]
-            group_key = NERExtractor.ENTITY_MAP.get(entity_type)
+        raw_entities = []
+        
+        for ent in doc.ents:
+            # scispaCy entity types: DISEASE, CHEMICAL, GENE, PROTEIN, etc.
+            # Map them to our schema
+            label = ent.label_
+            mapped_type = "SYMPTOM" # Default fallback
+            
+            if label == "DISEASE": mapped_type = "DISEASE"
+            elif label == "CHEMICAL": mapped_type = "MEDICATION"
+            
+            group_key = NERExtractor.ENTITY_MAP.get(mapped_type)
             if group_key:
-                entity_text = entity["text"].strip()
+                entity_text = ent.text.strip()
                 if entity_text and entity_text not in grouped[group_key]:
                     grouped[group_key].append(entity_text)
+            
+            raw_entities.append({
+                "text": ent.text,
+                "entity_type": mapped_type,
+                "confidence": 0.85, # scispaCy doesn't give direct confidence easily, use a high constant for pre-trained
+                "start": ent.start_char,
+                "end": ent.end_char
+            })
                     
         return NERResult(
             diseases=grouped["diseases"], symptoms=grouped["symptoms"],
             medications=grouped["medications"], anatomy=grouped["anatomy"],
-            raw_entities=all_entities
+            raw_entities=raw_entities
         )
-        
-    @staticmethod
-    def _extract_chunk(text: str, model, tokenizer, device: str, char_offset: int = 0) -> list[dict]:
-        inputs = tokenizer(text, return_tensors="pt", truncation=True, max_length=512, return_offsets_mapping=True, padding=False)
-        offset_mapping = inputs.pop("offset_mapping")[0]
-        inputs = {k: v.to(device) for k, v in inputs.items()}
-        
-        with torch.no_grad():
-            outputs = model(**inputs)
-            
-        predictions = torch.argmax(outputs.logits, dim=-1)[0]
-        entities = []
-        current_entity = None
-        
-        for idx, (pred_id, offsets) in enumerate(zip(predictions, offset_mapping)):
-            label = model.config.id2label[pred_id.item()]
-            start, end = offsets[0].item(), offsets[1].item()
-            
-            if start == 0 and end == 0: # Special token
-                if current_entity:
-                    entities.append(current_entity)
-                    current_entity = None
-                continue
-                
-            token_text = text[start:end]
-            
-            if label.startswith("B-"):
-                if current_entity: entities.append(current_entity)
-                current_entity = {
-                    "text": token_text, "entity_type": label,
-                    "start": start + char_offset, "end": end + char_offset,
-                    "confidence": torch.softmax(outputs.logits[0][idx], dim=-1).max().item()
-                }
-            elif label.startswith("I-") and current_entity:
-                current_entity["text"] += token_text if not token_text.startswith("##") else token_text[2:]
-                current_entity["end"] = end + char_offset
-            else:
-                if current_entity:
-                    entities.append(current_entity)
-                    current_entity = None
-                    
-        if current_entity:
-            entities.append(current_entity)
-            
-        return [e for e in entities if e["confidence"] > 0.7]
 
     @staticmethod
     def _chunk_text(text: str, tokenizer, max_length: int = 400, overlap: int = 50) -> list[tuple[str, int]]:

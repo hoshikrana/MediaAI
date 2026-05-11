@@ -2,12 +2,15 @@ import asyncio
 import uuid
 import logging
 from pathlib import Path
-from datetime import datetime, UTC
+from datetime import datetime, timezone
 from sqlalchemy import select, func
 
 from backend.db.models import AnalysisTask, AnalysisSession
+from backend.db.session import AsyncSessionLocal
 from backend.core.exceptions import TaskNotFoundError, SessionAccessDeniedError
 from backend.core.logging_config import ml_logger
+from backend.ml.registry import model_registry
+from backend.orchestration.pipeline import AnalysisPipeline
 
 logger = logging.getLogger(__name__)
 
@@ -133,21 +136,20 @@ class AnalysisTaskQueue:
                 select(AnalysisTask).where(AnalysisTask.status == "PENDING")
                 .order_by(AnalysisTask.priority.desc(), AnalysisTask.created_at.asc())
                 .limit(1)
-                .with_for_update(skip_locked=True)
             )
-            return result.scalar_one_or_none()
+            task = result.scalar_one_or_none()
+            if task:
+                # Mark as PROCESSING immediately to prevent re-fetching
+                task.status = "PROCESSING"
+                task.started_at = datetime.now(timezone.utc)
+                await db.commit()
+            return task
 
     async def _process_task(self, task: AnalysisTask):
         async with self._active_lock:
             self._active_count += 1
             
         try:
-            async with self._db_factory() as db:
-                task.status = "PROCESSING"
-                task.started_at = datetime.now(UTC)
-                await db.merge(task)
-                await db.commit()
-                
             result = await self._pipeline.run(
                 session_id=task.session_id,
                 image_path=Path(task.image_path),
@@ -157,10 +159,10 @@ class AnalysisTaskQueue:
             async with self._db_factory() as db:
                 db_task = await db.get(AnalysisTask, task.id)
                 db_task.status = "COMPLETED"
-                db_task.completed_at = datetime.now(UTC)
+                db_task.completed_at = datetime.now(timezone.utc)
                 
                 session = await db.get(AnalysisSession, task.session_id)
-                session.result_json = result.model_dump()
+                session.result_json = result.model_dump(mode="json")
                 session.status = "READY"
                 session.risk_level = result.vision.risk_level if result.vision else "UNKNOWN"
                 
@@ -168,7 +170,7 @@ class AnalysisTaskQueue:
                 
             ml_logger.log_pipeline_step(
                 "full_pipeline", "COMPLETED", 
-                int((datetime.now(UTC) - task.started_at).total_seconds() * 1000), task.session_id
+                int((datetime.now(timezone.utc) - task.started_at).total_seconds() * 1000), task.session_id
             )
             
         except Exception as e:
@@ -196,3 +198,6 @@ class AnalysisTaskQueue:
             async with self._active_lock:
                 self._active_count -= 1
             self._new_task_event.set()
+
+
+task_queue = AnalysisTaskQueue(AsyncSessionLocal, AnalysisPipeline(model_registry))

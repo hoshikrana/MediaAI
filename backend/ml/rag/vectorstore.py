@@ -18,13 +18,10 @@ class MedicalVectorStore:
         self._embedder = None
         
     async def initialize(self):
-        if settings.ENVIRONMENT == "production":
-            import chromadb
-            self._client = chromadb.EphemeralClient()
-        else:
-            import chromadb
-            persist_path = str(settings.BASE_DIR / "data" / "chromadb" if hasattr(settings, 'BASE_DIR') else Path("data/chromadb"))
-            self._client = chromadb.PersistentClient(path=persist_path)
+        import chromadb
+        persist_path = settings.MODEL_CACHE_DIR / "chromadb"
+        persist_path.mkdir(parents=True, exist_ok=True)
+        self._client = chromadb.PersistentClient(path=str(persist_path))
             
         self._collection = self._client.get_or_create_collection(
             name=self.COLLECTION_NAME, metadata={"hnsw:space": "cosine"}

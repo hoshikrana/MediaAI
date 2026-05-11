@@ -16,6 +16,7 @@ class AnalysisSession(Base, UUIDMixin, TimestampMixin):
     result_json: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
     risk_level: Mapped[Optional[str]] = mapped_column(Enum("LOW", "MEDIUM", "HIGH", "UNKNOWN", name="risk_level"), index=True, nullable=True)
     error_message: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    pdf_filename: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     expires_at: Mapped[datetime] = mapped_column(nullable=False)
 
     user: Mapped[Optional["User"]] = relationship(back_populates="sessions")
