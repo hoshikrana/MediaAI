@@ -9,7 +9,7 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 # ── Configuration ──────────────────────────────────────────────
-HF_REPO_ID = os.getenv("HF_MODEL_REPO", "hoshikrana/MedSightAI")
+HF_REPO_ID = os.getenv("HF_MODEL_REPO", "hoshikrana/VAE_and_VIT_Anomaly_detection")
 MODEL_FILES = [
     "pulmonary_anomaly_detector.pth",
     "best_vae.pth",
