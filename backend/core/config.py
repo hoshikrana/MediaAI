@@ -128,7 +128,8 @@ def startup_validation():
 
     if settings.is_production:
         if not settings.GOOGLE_CLIENT_ID:
-            errors.append("GOOGLE_CLIENT_ID is required in production.")
+            import logging
+            logging.getLogger(__name__).warning("⚠️ GOOGLE_CLIENT_ID not set — Google OAuth disabled in production")
         if settings.DEBUG:
             errors.append("DEBUG mode must be False in production.")
         if settings.STORAGE_BACKEND == "r2":
