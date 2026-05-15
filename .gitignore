@@ -82,3 +82,10 @@ scratch/
 *.ipynb_checkpoints/
 .ipynb_checkpoints/
 image.png
+_gen_paper*.py
+_analyze_template.py
+_doc_state.pkl
+.claude-dev-helper/
+.dist/
+desktop.ini
+results/__results___files/
