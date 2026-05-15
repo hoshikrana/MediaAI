@@ -73,4 +73,12 @@ backend/logs/*.log
 !backend/logs/.gitkeep
 backend/temp/*
 !backend/temp/.gitkeep
+backend/uploads/*
+!backend/uploads/.gitkeep
 *.sqlite3
+*.db
+medsight.db
+scratch/
+*.ipynb_checkpoints/
+.ipynb_checkpoints/
+image.png

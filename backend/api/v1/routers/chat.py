@@ -11,6 +11,7 @@ from backend.db.session import get_db
 from sqlalchemy import select
 from backend.ml.rag.retriever import MedicalRAG
 from backend.ml.rag.generator import ChatGenerator
+from backend.ml.rag import gemini_client
 
 router = APIRouter()
 
@@ -63,29 +64,62 @@ async def chat(
     history_msgs = history_result.scalars().all()
     history_dicts = [{"role": m.role, "content": m.content} for m in history_msgs]
     
-    session_result = session.result_json if hasattr(session, 'result_json') else {}
+    session_result = (session.result_json if hasattr(session, 'result_json') else None) or {}
     chunks = MedicalRAG.retrieve(body.message, session_result, n_results=5)
-    prompt = MedicalRAG.build_prompt(body.message, chunks, history_dicts, session_result)
     
+    # Check model availability: Gemini > BioGPT > Template fallback
+    use_gemini = gemini_client.is_available()
     biogpt_state = await registry.get("biogpt_base") if registry else None
     biogpt_ready = biogpt_state and biogpt_state.is_available and biogpt_state.model is not None and biogpt_state.tokenizer is not None
-    full_response = []
     
     async def stream_generator():
         yield f"data: {json.dumps({'type': 'sources', 'sources': chunks[:3]})}\n\n"
         
         final_text = ""
-        if not biogpt_ready:
+        
+        # ── Tier 1: Gemini API (best quality) ──
+        if use_gemini:
+            try:
+                stream = await gemini_client.generate_gemini_stream(
+                    body.message, session_result, history_dicts, chunks
+                )
+                if stream is not None:
+                    collected = []
+                    async for token in stream:
+                        collected.append(token)
+                        yield f"data: {json.dumps({'type': 'token', 'token': token})}\n\n"
+                        await asyncio.sleep(0.01)
+                    final_text = "".join(collected)
+                else:
+                    raise RuntimeError("Gemini returned None stream")
+            except Exception as e:
+                import logging
+                logging.getLogger(__name__).warning(f"Gemini failed, falling back: {e}")
+                final_text = ""  # Fall through to next tier
+        
+        # ── Tier 2: BioGPT local model ──
+        if not final_text and biogpt_ready:
+            prompt = MedicalRAG.build_prompt(body.message, chunks, history_dicts, session_result)
+            token_gen = await asyncio.to_thread(
+                lambda: list(ChatGenerator.generate_stream(prompt, biogpt_state.model, biogpt_state.tokenizer))
+            )
+            collected = []
+            for token in token_gen:
+                collected.append(token)
+                yield f"data: {json.dumps({'type': 'token', 'token': token})}\n\n"
+                await asyncio.sleep(0.02)
+            final_text = "".join(collected)
+        
+        # ── Tier 3: Template fallback ──
+        if not final_text:
             fallback = ChatGenerator.generate_fallback(body.message, session_result, chunks)
             final_text = fallback
-            yield f"data: {json.dumps({'type': 'token', 'token': fallback})}\n\n"
-        else:
-            token_gen = await asyncio.to_thread(lambda: list(ChatGenerator.generate_stream(prompt, biogpt_state.model, biogpt_state.tokenizer)))
-            for token in token_gen:
-                full_response.append(token)
+            # Stream word-by-word for natural feel
+            words = fallback.split(" ")
+            for i, word in enumerate(words):
+                token = word if i == 0 else " " + word
                 yield f"data: {json.dumps({'type': 'token', 'token': token})}\n\n"
-                await asyncio.sleep(0.02) # Optional smoothing
-            final_text = "".join(full_response)
+                await asyncio.sleep(0.015)
                 
         if warning:
             final_text += f"\n\n{warning}"
@@ -94,7 +128,6 @@ async def chat(
         yield f"data: {json.dumps({'type': 'done'})}\n\n"
         
         # Save assistant message to DB after stream finishes
-        # Must use a new session since the stream runs after the endpoint returns
         from backend.db.session import AsyncSessionLocal
         async with AsyncSessionLocal() as bg_db:
             ast_msg = ChatMessage(session_id=body.session_id, role="assistant", content=final_text, sources_json=chunks[:3])
@@ -106,3 +139,4 @@ async def chat(
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "Connection": "keep-alive", "X-Accel-Buffering": "no"}
     )
+

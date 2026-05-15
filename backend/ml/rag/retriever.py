@@ -11,18 +11,22 @@ class MedicalRAG:
     @staticmethod
     def retrieve(query: str, session_result: dict | None, n_results: int = 5) -> list[dict]:
         enriched_query = query
-        if session_result:
-            primary_dx = session_result.get("nlp", {}).get("primary_diagnosis", "")
-            symptoms = session_result.get("nlp", {}).get("entities", {}).get("symptoms", [])
-            if primary_dx:
-                enriched_query = f"{query} {primary_dx} {' '.join(symptoms[:3])}"
+        if session_result and isinstance(session_result, dict):
+            nlp_data = session_result.get("nlp") or {}
+            if isinstance(nlp_data, dict):
+                primary_dx = nlp_data.get("primary_diagnosis", "")
+                entities = nlp_data.get("entities") or {}
+                symptoms = entities.get("symptoms", []) if isinstance(entities, dict) else []
+                if primary_dx:
+                    enriched_query = f"{query} {primary_dx} {' '.join(symptoms[:3])}"
         return vector_store.search(enriched_query, n_results=n_results)
 
     @staticmethod
     def build_prompt(query: str, retrieved_chunks: list[dict], chat_history: list[dict], session_result: dict | None) -> str:
         parts = []
-        if session_result:
-            vision, nlp = session_result.get("vision", {}), session_result.get("nlp", {})
+        if session_result and isinstance(session_result, dict):
+            vision = session_result.get("vision") or {}
+            nlp = session_result.get("nlp") or {}
             if vision or nlp:
                 parts.append("Patient analysis context:")
                 if vision:

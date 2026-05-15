@@ -164,26 +164,52 @@ class ModelRegistry:
         cache_dir.mkdir(parents=True, exist_ok=True)
         
         if name == "convae_anomaly":
-            # Loader for the custom ONNX or PT Autoencoder
-            model_path = settings.MODEL_CACHE_DIR / "chest_convae.onnx"
-            stats_path = settings.MODEL_CACHE_DIR / "anomaly_stats.json"
-            
-            if not model_path.exists():
-                logger.warning("ConvAE model file not found. Running with random-init fallback.")
-                # We return None so the pipeline knows to use a mock/fallback
-                return {"model": None, "tokenizer": None, "stats": {"mean": 0.001, "std": 0.0005}}
-            
-            # In a real impl, we'd load ONNX runtime here
-            import onnxruntime as ort
-            session = ort.InferenceSession(str(model_path))
-            
-            import json
-            stats = {"mean": 0.001, "std": 0.0005}
-            if stats_path.exists():
-                stats = json.loads(stats_path.read_text())
-                
-            return {"model": session, "tokenizer": None, "stats": stats}
-            
+            from backend.ml.vision import model_paths as mp
+
+            try:
+                backend, reason = mp.resolve_vision_backend()
+            except FileNotFoundError as exc:
+                logger.error("%s", exc)
+                raise
+
+            stats_path = mp.resolve_anomaly_stats_path()
+            stats = mp.load_stats(stats_path)
+
+            if backend == "none":
+                logger.warning(
+                    "No vision artifacts found (pulmonary .pth or ONNX) under %s or MODEL_CACHE_DIR; vision uses demo fallback.",
+                    settings.TRAINED_MODEL_OUTPUT_DIR,
+                )
+                return {"model": None, "tokenizer": None, "stats": stats}
+
+            if backend == "pulmonary":
+                ckpt_path = mp.resolve_pulmonary_checkpoint_path()
+                if not ckpt_path:
+                    return {"model": None, "tokenizer": None, "stats": stats}
+                from backend.ml.vision.pulmonary_anomaly import load_pulmonary_detector
+
+                import torch
+
+                device = "cuda" if torch.cuda.is_available() else "cpu"
+                logger.info("Loading pulmonary detector from %s (%s)", ckpt_path, reason)
+                wrapper = load_pulmonary_detector(ckpt_path, device=device)
+                return {
+                    "model": wrapper,
+                    "tokenizer": None,
+                    "stats": {"threshold": wrapper.threshold, "backend": "pulmonary"},
+                }
+
+            if backend == "onnx":
+                import onnxruntime as ort
+
+                onnx_path = mp.resolve_onnx_path()
+                if not onnx_path:
+                    return {"model": None, "tokenizer": None, "stats": stats}
+                logger.info("Loading ConvAE ONNX from %s (%s)", onnx_path, reason)
+                session = ort.InferenceSession(str(onnx_path))
+                return {"model": session, "tokenizer": None, "stats": stats}
+
+            return {"model": None, "tokenizer": None, "stats": stats}
         elif name == "scispacy_ner":
             import spacy
             try:

@@ -4,6 +4,8 @@ import logging
 from pathlib import Path
 from datetime import datetime, timezone
 
+import numpy as np
+
 from backend.ml.registry import ModelRegistry
 from backend.core.exceptions import InvalidFileError, InferenceError, ModelNotLoadedError
 from backend.api.v1.schemas.analysis import (
@@ -116,7 +118,7 @@ class AnalysisPipeline:
             return await asyncio.to_thread(self._run_demo_vision, image_path)
 
         from backend.ml.vision.anomaly import AnomalyDetector
-        from backend.ml.vision.gradcam import GradCAM
+        from backend.ml.vision.pulmonary_anomaly import PulmonaryModelWrapper, onnx_reconstruction_panel
 
         try:
             state = await self.registry.get("convae_anomaly")
@@ -130,16 +132,17 @@ class AnalysisPipeline:
         if state.model is None:
              return await asyncio.to_thread(self._run_demo_vision, image_path)
 
-        # ConvAE path
-        # In a real implementation with ONNX, this would call session.run()
-        # For now, we use a specialized score function in AnomalyDetector
-        anomaly_score, model_confidence, reconstructed_np = await asyncio.to_thread(
-            AnomalyDetector.score_convae, image_path, state.model, state.stats
-        )
-        
-        heatmap_b64, top_regions = await asyncio.to_thread(
-            GradCAM.generate, image_path, state.model, anomaly_score, reconstructed_np
-        )
+        if isinstance(state.model, PulmonaryModelWrapper):
+            anomaly_score, model_confidence, heatmap_b64, top_regions = await asyncio.to_thread(
+                state.model.predict, image_path
+            )
+        else:
+            anomaly_score, model_confidence, reconstructed_np = await asyncio.to_thread(
+                AnomalyDetector.score_convae, image_path, state.model, state.stats
+            )
+            heatmap_b64, top_regions = await asyncio.to_thread(
+                onnx_reconstruction_panel, image_path, reconstructed_np, anomaly_score
+            )
         
         risk_level = "LOW" if anomaly_score < 40 else "MEDIUM" if anomaly_score < 70 else "HIGH"
         return VisionResult(

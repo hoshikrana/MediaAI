@@ -2,7 +2,7 @@
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
-import { Upload, Brain, FileText, Activity, MessageSquare, Database, CheckCircle, XCircle, ArrowRight } from 'lucide-react'
+import { Upload, Brain, FileText, Activity, MessageSquare, Database, CheckCircle, XCircle, ArrowRight, Layers, Cpu } from 'lucide-react'
 import { apiClient } from '@/lib/api/client'
 
 const fadeUp = {
@@ -37,27 +37,27 @@ export default function LandingPage() {
     }, [])
 
     const features = [
-        { icon: <Activity className="w-6 h-6" />, title: "Anomaly Detection", desc: "Unsupervised DINOv2-based detection pinpoints imaging abnormalities with Grad-CAM heatmaps.", color: "from-red-500/20 to-red-600/5" },
-        { icon: <FileText className="w-6 h-6" />, title: "Medical NER", desc: "BioBERT extracts diseases, symptoms, and medications from clinical text with high precision.", color: "from-blue-500/20 to-blue-600/5" },
-        { icon: <MessageSquare className="w-6 h-6" />, title: "Voice Input", desc: "Whisper transcribes spoken symptoms directly into the analysis pipeline in real-time.", color: "from-purple-500/20 to-purple-600/5" },
-        { icon: <Brain className="w-6 h-6" />, title: "Multimodal Fusion", desc: "MedCLIP aligns image features and text embeddings for holistic cross-modal diagnosis.", color: "from-teal-500/20 to-teal-600/5" },
-        { icon: <Database className="w-6 h-6" />, title: "RAG Chatbot", desc: "Ask follow-up questions grounded in 1,000+ PubMed abstracts via ChromaDB retrieval.", color: "from-amber-500/20 to-amber-600/5" },
-        { icon: <FileText className="w-6 h-6" />, title: "PDF Reports", desc: "Generate professional diagnostic reports with findings, heatmaps, and clinical narratives.", color: "from-emerald-500/20 to-emerald-600/5" }
+        { icon: <Activity className="w-6 h-6" />, title: "Unsupervised Anomaly Detection", desc: "VGG16 → VAE → ViT pipeline trained only on normal X-rays detects anomalies via reconstruction error, KL divergence, and attention-based scoring.", color: "from-red-500/20 to-red-600/5" },
+        { icon: <Layers className="w-6 h-6" />, title: "ViT Attention Heatmaps", desc: "CLS token attention weights from the 6-layer Vision Transformer are upsampled to produce interpretable anomaly heatmaps.", color: "from-blue-500/20 to-blue-600/5" },
+        { icon: <FileText className="w-6 h-6" />, title: "Clinical NER", desc: "scispaCy extracts diseases, symptoms, and medications. DistilBART performs zero-shot classification across 20 pulmonary conditions.", color: "from-purple-500/20 to-purple-600/5" },
+        { icon: <MessageSquare className="w-6 h-6" />, title: "RAG Medical Chatbot", desc: "BioGPT generates grounded responses using PubMed abstracts retrieved via MiniLM embeddings and ChromaDB vector search.", color: "from-teal-500/20 to-teal-600/5" },
+        { icon: <Brain className="w-6 h-6" />, title: "Fused Anomaly Score", desc: "Three complementary signals — reconstruction error (40%), KL divergence (20%), and ViT score (40%) — are fused into a single calibrated anomaly score.", color: "from-amber-500/20 to-amber-600/5" },
+        { icon: <Cpu className="w-6 h-6" />, title: "Resource Efficient", desc: "Only 2.53M trainable parameters. Entire pipeline runs under 4GB VRAM with mixed-precision inference and VRAM-aware model registry.", color: "from-emerald-500/20 to-emerald-600/5" }
     ]
 
     const steps = [
-        { step: 1, icon: <Upload className="w-7 h-7" />, title: "Upload & Describe", desc: "Drop a chest X-ray and describe patient symptoms using text or voice input." },
-        { step: 2, icon: <Brain className="w-7 h-7" />, title: "AI Analysis", desc: "DINOv2, BioBERT, and MedCLIP process imaging and text data in parallel." },
-        { step: 3, icon: <FileText className="w-7 h-7" />, title: "Get Results", desc: "Receive interactive heatmaps, entity tags, risk assessment, and downloadable PDF." }
+        { step: 1, icon: <Upload className="w-7 h-7" />, title: "Upload & Describe", desc: "Drop a chest X-ray and add clinical notes via text or voice. scispaCy extracts medical entities automatically." },
+        { step: 2, icon: <Brain className="w-7 h-7" />, title: "VGG16 → VAE → ViT", desc: "Frozen VGG16 extracts 512-d features. The VAE learns a 256-d latent manifold of normal anatomy. The ViT scores anomaly level." },
+        { step: 3, icon: <FileText className="w-7 h-7" />, title: "Fused Results", desc: "Get calibrated anomaly scores, ViT attention heatmaps, NLP entity tags, risk assessment, and AI-assisted chat." }
     ]
 
-    const techStack = ["PyTorch", "HuggingFace", "BioBERT", "DINOv2", "MedCLIP", "BioGPT", "FastAPI", "Next.js", "ChromaDB", "Whisper"]
+    const techStack = ["PyTorch", "VGG16", "VAE", "Vision Transformer", "scispaCy", "DistilBART", "BioGPT", "MiniLM", "ChromaDB", "FastAPI", "Next.js"]
 
     const stats = [
-        { value: "6", label: "ML Models" },
-        { value: "~0.72", label: "AUC Score" },
-        { value: "<60s", label: "Pipeline Speed" },
-        { value: "1K+", label: "PubMed Articles" }
+        { value: "0.718", label: "AUROC Score" },
+        { value: "2.53M", label: "Trainable Params" },
+        { value: "98.6%", label: "ViT Val Accuracy" },
+        { value: "21K+", label: "X-ray Dataset" }
     ]
 
     return (
@@ -84,7 +84,7 @@ export default function LandingPage() {
                     <motion.div variants={fadeUp} initial="hidden" animate="visible" custom={0} className="mb-8">
                         <span className="inline-flex items-center gap-2 px-5 py-2 rounded-full border border-teal-500/20 bg-teal-500/5 backdrop-blur-sm">
                             <span className="w-2 h-2 bg-teal-400 rounded-full animate-pulse" />
-                            <span className="text-sm font-medium text-teal-400 tracking-wide">AI-Powered Medical Intelligence</span>
+                            <span className="text-sm font-medium text-teal-400 tracking-wide">Unsupervised Pulmonary Anomaly Detection</span>
                         </span>
                     </motion.div>
 
@@ -93,11 +93,11 @@ export default function LandingPage() {
                     </motion.h1>
 
                     <motion.p variants={fadeUp} initial="hidden" animate="visible" custom={2} className="text-xl md:text-2xl text-gray-400 mb-4 font-light tracking-wide">
-                        Multimodal Diagnostic Analysis Platform
+                        VGG16 → VAE → Vision Transformer · Multimodal Diagnostic Platform
                     </motion.p>
 
                     <motion.p variants={fadeUp} initial="hidden" animate="visible" custom={3} className="text-gray-500 max-w-2xl mx-auto mb-10 leading-relaxed text-base">
-                        Fusing computer vision and natural language processing to analyze chest X-rays alongside clinical notes — delivering zero-shot classifications, interactive heatmaps, and evidence-based diagnostic reports.
+                        A three-stage deep learning pipeline trained exclusively on normal chest radiographs to detect pulmonary anomalies — fused with clinical NLP and a RAG-powered medical chatbot. AUROC 0.718 with only 2.53M trainable parameters.
                     </motion.p>
 
                     <motion.div variants={fadeUp} initial="hidden" animate="visible" custom={4} className="flex flex-col sm:flex-row gap-4 mb-12">
@@ -166,7 +166,7 @@ export default function LandingPage() {
                 <div className="max-w-6xl mx-auto relative z-10">
                     <motion.div initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} viewport={{ once: true }} className="text-center mb-20">
                         <p className="text-sm font-semibold text-teal-400 uppercase tracking-[0.2em] mb-3">Pipeline</p>
-                        <h3 className="section-title">How It Works</h3>
+                        <h3 className="section-title">Three-Stage Anomaly Detection</h3>
                     </motion.div>
 
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-8 relative">
@@ -204,7 +204,7 @@ export default function LandingPage() {
                 <div className="max-w-6xl mx-auto">
                     <motion.div initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} viewport={{ once: true }} className="text-center mb-20">
                         <p className="text-sm font-semibold text-teal-400 uppercase tracking-[0.2em] mb-3">Capabilities</p>
-                        <h3 className="section-title">Built for Medical AI</h3>
+                        <h3 className="section-title">Built for Medical AI Research</h3>
                     </motion.div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
@@ -238,7 +238,7 @@ export default function LandingPage() {
                     className="max-w-3xl mx-auto text-center relative z-10"
                 >
                     <h3 className="text-3xl md:text-5xl font-bold text-white mb-6 tracking-tight">Ready to Analyze?</h3>
-                    <p className="text-gray-400 mb-10 text-lg">Upload a chest X-ray and get AI-powered diagnostic insights in under 60 seconds.</p>
+                    <p className="text-gray-400 mb-10 text-lg">Upload a chest X-ray and get AI-powered diagnostic insights powered by our VGG16 → VAE → ViT anomaly detection pipeline.</p>
                     <Link href="/upload" className="btn-primary inline-flex items-center gap-2 text-lg px-10 py-4">
                         Launch Analysis <ArrowRight className="w-5 h-5" />
                     </Link>

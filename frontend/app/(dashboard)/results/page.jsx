@@ -46,7 +46,7 @@ export default function ResultsDashboard() {
                     
                     <div className="mt-8 space-y-3 text-left">
                         {/* Fake progress steps for UX */}
-                        {['Queue position secured', 'Vision models loading', 'Extracting features', 'Running MedCLIP Fusion'].map((step, i) => (
+                        {['Queue position secured', 'Vision models loading', 'Extracting VGG16 features', 'Running ViT anomaly scoring'].map((step, i) => (
                             <div key={i} className={`flex items-center gap-3 text-sm ${status === "PROCESSING" && i < 2 ? 'text-teal-400' : 'text-gray-500'}`}>
                                 <div className={`w-2 h-2 rounded-full ${status === "PROCESSING" && i < 2 ? 'bg-teal-500' : 'bg-gray-600'}`} />
                                 {step}
@@ -143,7 +143,7 @@ export default function ResultsDashboard() {
                             </div>
                         </div>
                         
-                        <div className="relative flex-1 bg-black rounded-xl overflow-hidden min-h-[300px] flex items-center justify-center border border-navy-600">
+                        <div className="relative flex-1 bg-black rounded-xl overflow-hidden min-h-[380px] flex items-center justify-center border border-navy-600">
                             {vision?.heatmap_base64 ? (
                                 <div className="absolute inset-0 w-full h-full overflow-hidden">
                                     <img 
@@ -151,7 +151,7 @@ export default function ResultsDashboard() {
                                         alt={`Analysis Result - ${viewMode}`} 
                                         className="absolute h-full w-[300%] max-w-none object-cover transition-transform duration-500 ease-in-out origin-left"
                                         style={{
-                                            transform: `translateX(-${viewMode === 'original' ? 0 : viewMode === 'heatmap' ? 33.333 : 66.666}%)`
+                                            transform: `translateX(-${viewMode === 'original' ? 0 : viewMode === 'heatmap' ? 33.38 : 66.72}%)`
                                         }}
                                     />
                                 </div>

@@ -56,6 +56,13 @@ async def lifespan(app: FastAPI):
     await init_db()
     logger.info("✅ Database initialized")
 
+    # Auto-download models from HuggingFace if not present locally
+    try:
+        from backend.ml.vision.hf_download import ensure_models
+        ensure_models()
+    except Exception as e:
+        logger.warning(f"⚠️ HuggingFace model download skipped: {e}")
+
     # ML model registry - Load in background to prevent blocking the API
     if _ml_system_loaded:
         try:

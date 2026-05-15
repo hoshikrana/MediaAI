@@ -37,7 +37,7 @@ $initFiles = @(
     "backend/db/models/__init__.py", "backend/db/models/user.py", "backend/db/models/session.py", "backend/db/models/task.py", "backend/db/models/api_key.py", "backend/db/models/stats.py",
     "backend/db/migrations/env.py",
     "backend/ml/__init__.py", "backend/ml/registry.py",
-    "backend/ml/vision/__init__.py", "backend/ml/vision/anomaly.py", "backend/ml/vision/gradcam.py",
+    "backend/ml/vision/__init__.py", "backend/ml/vision/anomaly.py", "backend/ml/vision/pulmonary_anomaly.py",
     "backend/ml/nlp/__init__.py", "backend/ml/nlp/ner.py", "backend/ml/nlp/classifier.py", "backend/ml/nlp/whisper.py",
     "backend/ml/fusion/__init__.py", "backend/ml/fusion/medclip.py",
     "backend/ml/rag/__init__.py", "backend/ml/rag/vectorstore.py", "backend/ml/rag/retriever.py", "backend/ml/rag/generator.py",

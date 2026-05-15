@@ -44,6 +44,12 @@ class Settings(BaseSettings):
     # === ML Config ===
     LOAD_ML_MODELS: bool = True
     MODEL_CACHE_DIR: Path = Path("./models/cache")
+    # Trained vision artifacts (see docs/contextScopeItemMention.md)
+    TRAINED_MODEL_OUTPUT_DIR: Path = Path("./results/outputs")
+    VISION_ANOMALY_BACKEND: Literal["auto", "onnx", "pulmonary"] = "auto"
+    PULMONARY_CHECKPOINT_PATH: str = ""
+    CONVAE_ONNX_PATH: str = ""
+    ANOMALY_STATS_PATH: str = ""
     TEMP_DIR: Path = Path("./backend/temp")
     MAX_UPLOAD_SIZE_MB: int = 10
     GPU_VRAM_BUDGET_MB: int = 3500
