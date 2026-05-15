@@ -1,13 +1,16 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-    output: "standalone",
     reactStrictMode: true,
     
     images: {
         domains: [],
+        remotePatterns: [
+            { protocol: "https", hostname: "*.hf.space" },
+        ],
         formats: ["image/webp", "image/avif"],
         minimumCacheTTL: 60
     },
+
     
     async headers() {
         return [
