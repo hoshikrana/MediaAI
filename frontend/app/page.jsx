@@ -2,7 +2,7 @@
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
-import { Upload, Brain, FileText, Activity, MessageSquare, Database, CheckCircle, XCircle, ArrowRight, Layers, Cpu } from 'lucide-react'
+import { Upload, Brain, FileText, Activity, MessageSquare, CheckCircle, XCircle, ArrowRight, Layers, Cpu } from 'lucide-react'
 import { apiClient } from '@/lib/api/client'
 
 const fadeUp = {
