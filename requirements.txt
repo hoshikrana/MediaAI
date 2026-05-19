@@ -1,59 +1,78 @@
-# [ML Core]
-torchvision==0.17.0  # Pairs exactly with PyTorch 2.2
-transformers==4.38.2  # Stable version for DINOv2 and BioBERT
-datasets==2.18.0  # Required for NCBI dataset parsing
-accelerate==0.27.2  # Handles memory-efficient model loading
-peft==0.9.0  # Needed for lightweight fine-tuning parameter handling
-sentence-transformers==2.6.0  # powers the all-MiniLM-L6-v2 embedding model
-timm==0.9.16  # Required backend for DINOv2 architecture
-scikit-learn==1.4.1.post1  # Used for metric calculations (F1, precision)
-numpy==1.26.4  # Last stable 1.x version before 2.0 breaking changes
-Pillow==10.2.0  # Safe version for PIL image processing
-opencv-python-headless==4.9.0.80  # Headless avoids Qt DLL conflicts on Windows servers
-openai-whisper==20231117  # Reliable version for Whisper CPU transcription
-onnxruntime==1.17.1  # Fast CPU inference for ConvAE
-scispacy==0.5.4  # Lightweight medical NLP
-# Install scispaCy model manually: pip install https://s3-us-west-2.amazonaws.com/ai2-s3-scispacy/releases/v0.5.1/en_core_sci_sm-0.5.1.tar.gz
+# ╔═══════════════════════════════════════════════════════════════════════╗
+# ║  MedSight AI — Python Dependencies                                  ║
+# ║  Python 3.10+  |  PyTorch 2.2                                       ║
+# ║  Install: pip install -r requirements.txt                            ║
+# ╚═══════════════════════════════════════════════════════════════════════╝
 
-# [Backend]
-fastapi==0.110.0  # Base API framework
-uvicorn[standard]==0.27.1  # ASGI server for FastAPI
-python-multipart==0.0.9  # Required for FastAPI file uploads
-pydantic==2.6.3  # Pydantic v2 exact version for type safety
-pydantic-settings==2.2.1  # Required for v2 configuration management
-email-validator==2.1.1  # Required by Pydantic EmailStr schemas
-slowapi==0.1.9  # Rate limiting without Redis
+# ── PyTorch (install FIRST — version must match torchvision) ──────────
+# GPU (CUDA 11.8):
+#   pip install torch==2.2.0+cu118 torchvision==0.17.0+cu118 --index-url https://download.pytorch.org/whl/cu118
+# CPU-only:
+#   pip install torch==2.2.0+cpu torchvision==0.17.0+cpu --index-url https://download.pytorch.org/whl/cpu
+
+# ── [ML Core] ─────────────────────────────────────────────────────────
+torchvision==0.17.0             # Pairs exactly with PyTorch 2.2
+transformers==4.38.2            # Stable version for BioGPT and BioBERT
+datasets==2.18.0                # Required for NCBI dataset parsing
+accelerate==0.27.2              # Handles memory-efficient model loading
+peft==0.9.0                     # Lightweight fine-tuning parameter handling
+sentence-transformers==2.6.0    # Powers the all-MiniLM-L6-v2 embedding model
+timm==0.9.16                    # Required backend for DINOv2 architecture
+scikit-learn==1.4.1.post1       # Used for metric calculations (F1, precision, recall)
+numpy==1.26.4                   # Last stable 1.x version before 2.0 breaking changes
+Pillow==10.2.0                  # Safe version for PIL image processing
+opencv-python-headless==4.9.0.80  # Headless avoids Qt DLL conflicts on servers
+onnxruntime==1.17.1             # Fast CPU inference for ConvAE ONNX backend
+scispacy==0.5.4                 # Lightweight medical NLP (NER pipeline)
+# Install scispaCy model manually:
+#   pip install https://s3-us-west-2.amazonaws.com/ai2-s3-scispacy/releases/v0.5.1/en_core_sci_sm-0.5.1.tar.gz
+
+# ── [Backend — FastAPI] ───────────────────────────────────────────────
+fastapi==0.110.0                # Base API framework
+uvicorn[standard]==0.27.1       # ASGI server for FastAPI
+python-multipart==0.0.9         # Required for FastAPI file uploads
+pydantic==2.6.3                 # Pydantic v2 exact version for type safety
+pydantic-settings==2.2.1        # Required for v2 configuration management
+email-validator==2.1.1          # Required by Pydantic EmailStr schemas
+slowapi==0.1.9                  # Rate limiting without Redis
 python-jose[cryptography]==3.3.0  # JWT creation and verification
-passlib[bcrypt]==1.7.4  # Password hashing algorithms
-httpx==0.27.0  # Async HTTP client for OAuth
-aiofiles==23.2.1  # Async file handling for image uploads
-authlib==1.3.0  # Handles Google OAuth 2.0 flow
-itsdangerous==2.1.2  # Required by Authlib sessions
-python-magic-bin==0.4.14  # Windows-compatible MIME type checker (critical)
+passlib[bcrypt]==1.7.4          # Password hashing algorithms
+httpx==0.27.0                   # Async HTTP client for OAuth
+aiofiles==23.2.1                # Async file handling for image uploads
+authlib==1.3.0                  # Handles Google OAuth 2.0 flow
+itsdangerous==2.1.2             # Required by Authlib sessions
+python-magic-bin==0.4.14        # Windows-compatible MIME type checker (critical for file validation)
 
-# [Database]
-sqlalchemy==2.0.28  # SQLAlchemy 2.0 for async ORM
-alembic==1.13.1  # Database migration manager
-aiosqlite==0.20.0  # Async SQLite driver for local dev
-asyncpg==0.29.0  # Async PostgreSQL driver for production
-greenlet==3.0.3  # Required for SQLAlchemy async execution
+# ── [Database] ────────────────────────────────────────────────────────
+sqlalchemy==2.0.28              # SQLAlchemy 2.0 async ORM
+alembic==1.13.1                 # Database migration manager
+aiosqlite==0.20.0               # Async SQLite driver for local development
+asyncpg==0.29.0                 # Async PostgreSQL driver for production
+greenlet==3.0.3                 # Required for SQLAlchemy async execution
 
-# [RAG + Vector DB]
-chromadb==0.4.24  # Stable local vector database
+# ── [RAG + Vector DB] ─────────────────────────────────────────────────
+chromadb==0.4.24                # Local vector database for RAG retrieval
 
-# [Utilities]
-reportlab==4.1.0  # PDF report generation
-fpdf2==2.7.9  # Fallback lightweight PDF generation
-python-dotenv==1.0.1  # Environment variable parsing
-tqdm==4.66.2  # Progress bars for dataset processing
-ffmpeg-python==0.2.0  # Whisper audio conversion wrapper
-apscheduler==3.10.4  # In-memory background task scheduling
-boto3==1.34.69  # Optional Cloudflare R2/S3-compatible upload storage
+# ── [Generative AI] ───────────────────────────────────────────────────
+google-generativeai>=0.8.0      # Gemini 2.0 Flash API for clinical Q&A chat
+huggingface_hub>=0.20.0         # HuggingFace Hub for model downloads
 
-# [Dev + Testing]
-pytest==8.1.0  # Core testing framework
-pytest-asyncio==0.23.5  # Allows testing async FastAPI routes
-black==24.3.0  # Code formatting
-ruff==0.3.4  # Fast Python linter
-mypy==1.9.0  # Static type checking
-locust==2.24.0  # Load testing framework
+# ── [Utilities] ───────────────────────────────────────────────────────
+reportlab==4.1.0                # PDF report generation
+fpdf2==2.7.9                    # Fallback lightweight PDF generation
+python-dotenv==1.0.1            # Environment variable parsing
+tqdm==4.66.2                    # Progress bars for dataset processing
+ffmpeg-python==0.2.0            # Audio conversion wrapper for Whisper
+apscheduler==3.10.4             # In-memory background task scheduling
+boto3==1.34.69                  # Optional Cloudflare R2/S3-compatible upload storage
+
+# ── [Audio — Optional] ────────────────────────────────────────────────
+openai-whisper==20231117        # Whisper CPU transcription for voice input
+
+# ── [Dev + Testing] ───────────────────────────────────────────────────
+pytest==8.1.0                   # Core testing framework
+pytest-asyncio==0.23.5          # Testing async FastAPI routes
+black==24.3.0                   # Code formatting
+ruff==0.3.4                     # Fast Python linter
+mypy==1.9.0                     # Static type checking
+locust==2.24.0                  # Load testing framework
