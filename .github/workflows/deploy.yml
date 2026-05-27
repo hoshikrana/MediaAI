@@ -24,7 +24,7 @@ jobs:
       - name: Upload backend Space
         run: |
           hf upload "${{ secrets.HF_SPACE_ID }}" . \
-            --repo-type=space \
+            --type=space \
             --commit-message="Deploy backend from GitHub Actions" \
             --exclude ".git/*" \
             --exclude ".github/*" \
