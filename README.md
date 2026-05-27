@@ -526,6 +526,9 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 | `DATABASE_URL` | `sqlite+aiosqlite:///./medsight.db` | Database connection string |
 | `GEMINI_API_KEY` | — | Google Gemini API key for AI chat |
 | `HF_TOKEN` | — | HuggingFace token for model downloads |
+| `ALLOWED_ORIGINS` | `http://localhost:3000` | Comma-separated exact frontend origins |
+| `ALLOWED_ORIGIN_REGEX` | `https://.*\.vercel\.app` | Regex for Vercel preview/production origins |
+| `TRUSTED_HOSTS` | `localhost,127.0.0.1,*.vercel.app,*.hf.space` | Hosts accepted by TrustedHostMiddleware |
 | `VISION_ANOMALY_BACKEND` | `auto` | `auto` / `onnx` / `pulmonary` |
 | `GPU_VRAM_BUDGET_MB` | `3500` | Max VRAM budget for model loading |
 | `MAX_UPLOAD_SIZE_MB` | `10` | Maximum upload file size |
@@ -636,6 +639,32 @@ The Dockerfile uses `python:3.11-slim`, installs CPU-only PyTorch (~800MB smalle
 ### HuggingFace Spaces
 
 The backend is configured to deploy directly to HuggingFace Spaces via the Docker SDK. The HuggingFace metadata is in the `README.md` frontmatter. Models are auto-downloaded from `hoshikrana/VAE_and_VIT_Anomaly_detection` on startup.
+
+Required GitHub repository secrets for the deployment workflow:
+
+| Secret | Purpose |
+|---|---|
+| `HF_TOKEN` | Hugging Face write token for uploading the Space and runtime model downloads |
+| `HF_SPACE_ID` | Space repo id, for example `username/medsight-ai-backend` |
+| `HF_SPACE_URL` | Public backend URL, for example `https://username-medsight-ai-backend.hf.space` |
+| `VERCEL_TOKEN` | Vercel CLI token |
+| `VERCEL_ORG_ID` | Vercel team/user id |
+| `VERCEL_PROJECT_ID` | Vercel project id for the frontend |
+
+Set these Hugging Face Space runtime variables as secrets or variables:
+
+```env
+ENVIRONMENT=production
+SECRET_KEY=<64-hex-or-long-random-secret>
+JWT_SECRET_KEY=<different-64-hex-or-long-random-secret>
+DATABASE_URL=<production-postgres-url-or-sqlite-for-demo-only>
+ALLOWED_ORIGINS=https://<your-vercel-domain>
+ALLOWED_ORIGIN_REGEX=https://.*\.vercel\.app
+TRUSTED_HOSTS=*.hf.space,localhost,127.0.0.1
+FRONTEND_URL=https://<your-vercel-domain>
+BACKEND_URL=https://<your-hf-space-subdomain>.hf.space
+HF_TOKEN=<token-if-model-repo-is-private>
+```
 
 ---
 

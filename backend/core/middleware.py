@@ -14,7 +14,7 @@ logger = logging.getLogger("access")
 class HTTPSRedirectMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         if settings.is_production:
-            # Check if request came in as HTTP (Render.com forwards as HTTPS but sets X-Forwarded-Proto)
+            # Check if request came in as HTTP behind a platform proxy.
             proto = request.headers.get("X-Forwarded-Proto", "https")
             if proto == "http":
                 https_url = str(request.url).replace("http://", "https://", 1)

@@ -123,7 +123,7 @@ def get_pagination(
     return page, limit
 
 def get_client_ip(request: Request) -> str:
-    """Extracts real IP from X-Forwarded-For (for Render.com proxy)"""
+    """Extracts real IP from X-Forwarded-For when running behind a platform proxy."""
     forwarded_for = request.headers.get("X-Forwarded-For")
     if forwarded_for:
         return forwarded_for.split(',')[0].strip()

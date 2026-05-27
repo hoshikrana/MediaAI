@@ -1,8 +1,8 @@
-name: Keep Alive — Prevent Render Sleep
+name: Keep Alive - Prevent Hugging Face Space Sleep
 
 on:
   schedule:
-    - cron: "*/14 * * * *"  # every 14 minutes
+    - cron: "*/14 * * * *"
 
 jobs:
   ping:
@@ -11,7 +11,7 @@ jobs:
       - name: Ping backend health
         run: |
           response=$(curl -s -o /dev/null -w "%{http_code}" \
-            "${{ secrets.RENDER_SERVICE_URL }}/api/v1/health" \
+            "${{ secrets.HF_SPACE_URL }}/api/v1/health" \
             --max-time 30)
           echo "Health check response: $response"
           if [ "$response" != "200" ] && [ "$response" != "503" ]; then

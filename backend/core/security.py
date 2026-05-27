@@ -119,12 +119,17 @@ def set_refresh_cookie(response: Response, token: str):
         max_age=settings.REFRESH_TOKEN_EXPIRE_DAYS * 86400,
         httponly=True,
         secure=settings.is_production,
-        samesite="lax",
+        samesite="none" if settings.is_production else "lax",
         path="/api/v1/auth/refresh"
     )
 
 def clear_auth_cookies(response: Response):
-    response.delete_cookie("refresh_token", path="/api/v1/auth/refresh")
+    response.delete_cookie(
+        "refresh_token",
+        path="/api/v1/auth/refresh",
+        secure=settings.is_production,
+        samesite="none" if settings.is_production else "lax",
+    )
 
 def get_refresh_token_from_cookie(request: Request) -> str:
     token = request.cookies.get("refresh_token")
