@@ -19,7 +19,8 @@ class Settings(BaseSettings):
     DEBUG: bool = False
     VERSION: str = "1.0.0"
     ALLOWED_ORIGINS: Any = ["http://localhost:3000"]
-    TRUSTED_HOSTS: Any = ["localhost", "127.0.0.1", "*.vercel.app"]
+    ALLOWED_ORIGIN_REGEX: str | None = r"https://.*\.vercel\.app"
+    TRUSTED_HOSTS: Any = ["localhost", "127.0.0.1", "*.vercel.app", "*.hf.space"]
     FRONTEND_URL: str = "http://localhost:3000"
     BACKEND_URL: str = "http://localhost:8000"
 
