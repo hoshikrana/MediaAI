@@ -80,7 +80,6 @@ jobs:
         run: |
           vercel deploy --prod --token=${{ secrets.VERCEL_TOKEN }} \
             --yes \
-            --cwd=./frontend \
             -e NEXT_PUBLIC_API_URL=${{ secrets.HF_SPACE_URL }}
         env:
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
