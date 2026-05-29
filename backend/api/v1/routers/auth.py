@@ -129,18 +129,23 @@ async def register(
         email=body.email,
         full_name=body.full_name,
         hashed_password=hash_password(body.password),
-        is_active=not settings.is_production,  # Auto-active in dev, requires verification in prod
-        is_verified=not settings.is_production
+        is_active=not settings.REQUIRE_EMAIL_VERIFICATION,
+        is_verified=not settings.REQUIRE_EMAIL_VERIFICATION,
     )
     db.add(user)
     await db.commit()
     await db.refresh(user)
     
-    plain_token, _token_hash = generate_verification_token()
-    background_tasks.add_task(send_verification_email, user.email, plain_token)
+    if settings.REQUIRE_EMAIL_VERIFICATION:
+        plain_token, _token_hash = generate_verification_token()
+        background_tasks.add_task(send_verification_email, user.email, plain_token)
     
     logger.info("User registered", extra={"user_id": str(user.id), "email": user.email})
-    message = "Account created. You can sign in now." if not settings.is_production else "Account created. Check your email to verify."
+    message = (
+        "Account created. Check your email to verify."
+        if settings.REQUIRE_EMAIL_VERIFICATION
+        else "Account created. You can sign in now."
+    )
     return MessageResponse(message=message)
 
 @router.post("/login", response_model=AuthResponse)
@@ -159,7 +164,10 @@ async def login(
         await brute_force_protector.check_and_record_failure(client_ip)
         raise AuthenticationError("Invalid email or password")
         
-    if not user.is_active:
+    if not user.is_active and not settings.REQUIRE_EMAIL_VERIFICATION:
+        user.is_active = True
+        user.is_verified = True
+    elif not user.is_active:
         raise AccountInactiveError("Please verify your email before logging in")
         
     brute_force_protector.record_success(client_ip)

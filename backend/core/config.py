@@ -23,6 +23,7 @@ class Settings(BaseSettings):
     TRUSTED_HOSTS: Any = ["localhost", "127.0.0.1", "*.vercel.app", "*.hf.space"]
     FRONTEND_URL: str = "http://localhost:3000"
     BACKEND_URL: str = "http://localhost:8000"
+    REQUIRE_EMAIL_VERIFICATION: bool = False
 
     # === Database ===
     DATABASE_URL: str = "sqlite+aiosqlite:///./medsight.db"
