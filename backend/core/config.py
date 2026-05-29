@@ -24,6 +24,7 @@ class Settings(BaseSettings):
     FRONTEND_URL: str = "http://localhost:3000"
     BACKEND_URL: str = "http://localhost:8000"
     REQUIRE_EMAIL_VERIFICATION: bool = False
+    STRICT_CHEST_XRAY_INPUT: bool = True
 
     # === Database ===
     DATABASE_URL: str = "sqlite+aiosqlite:///./medsight.db"

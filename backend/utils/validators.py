@@ -50,6 +50,9 @@ class ImageValidator:
             with Image.open(io.BytesIO(content)) as img:
                 width, height = img.size
                 mode = img.mode
+                ImageValidator._validate_chest_xray_like(img)
+        except InvalidFileError:
+            raise
         except Exception:
             raise InvalidFileError("File is corrupted or cannot be read as an image")
             
@@ -68,6 +71,60 @@ class ImageValidator:
             filename=file.filename or "unknown.png", size_bytes=len(content),
             mime_type=mime, width=width, height=height, mode=mode, content=content
         )
+
+    @staticmethod
+    def _validate_chest_xray_like(img: Image.Image) -> None:
+        """Reject common non-radiology photos before clinical analysis.
+
+        This is intentionally conservative: it is not a diagnosis model, only a safety gate to
+        prevent normal photos/screenshots from receiving fake-looking medical scores.
+        """
+        if not settings.STRICT_CHEST_XRAY_INPUT:
+            return
+
+        import numpy as np
+
+        rgb = img.convert("RGB").resize((256, 256))
+        arr = np.asarray(rgb, dtype=np.float32)
+        channels = [arr[:, :, i] for i in range(3)]
+        max_channel_delta = max(
+            float(np.mean(np.abs(channels[i] - channels[j])))
+            for i in range(3)
+            for j in range(i + 1, 3)
+        )
+
+        gray = np.asarray(rgb.convert("L"), dtype=np.float32) / 255.0
+        bright_ratio = float((gray > 0.92).mean())
+        contrast = float(gray.std())
+
+        if max_channel_delta > 8.0:
+            raise InvalidFileError(
+                "Only grayscale chest X-ray images are supported. Please upload a radiograph, not a color photo."
+            )
+
+        if bright_ratio > 0.35 or contrast < 0.08:
+            raise InvalidFileError(
+                "This image does not look like a usable chest X-ray. Please upload a clear frontal chest radiograph."
+            )
+
+        try:
+            import cv2
+
+            cascade_path = Path(cv2.data.haarcascades) / "haarcascade_frontalface_default.xml"
+            if cascade_path.is_file():
+                face_detector = cv2.CascadeClassifier(str(cascade_path))
+                gray_u8 = np.uint8(gray * 255)
+                faces = face_detector.detectMultiScale(
+                    gray_u8, scaleFactor=1.1, minNeighbors=5, minSize=(32, 32)
+                )
+                if len(faces) > 0:
+                    raise InvalidFileError(
+                        "This appears to be a person/photo, not a chest X-ray. Please upload a medical radiograph."
+                    )
+        except InvalidFileError:
+            raise
+        except Exception as exc:
+            logger.debug("Optional face/photo rejection skipped: %s", exc)
 
 def sanitize_symptoms_text(text: str) -> str:
     if not text:

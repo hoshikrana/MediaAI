@@ -41,9 +41,11 @@ class AnalysisPipeline:
         try:
             # We wrap this in resilience layers in resilience.py
             vision_result = await self._run_vision(processed_image_path)
+        except (InvalidFileError, ModelNotLoadedError, InferenceError):
+            raise
         except Exception as e:
             logger.warning(f"Vision analysis failed for session {session_id}: {e}")
-            warnings.append(f"Vision analysis unavailable: {type(e).__name__}")
+            raise InferenceError(f"Chest X-ray vision analysis failed: {type(e).__name__}")
         timings["vision_ms"] = int((time.monotonic() - t0) * 1000)
 
         # ── STEP 3: VRAM CLEANUP ───────────────────────────────
@@ -115,22 +117,18 @@ class AnalysisPipeline:
 
     async def _run_vision(self, image_path: Path) -> VisionResult:
         if not self.registry:
-            return await asyncio.to_thread(self._run_demo_vision, image_path)
+            raise ModelNotLoadedError("Chest X-ray vision model is not configured.")
 
         from backend.ml.vision.anomaly import AnomalyDetector
         from backend.ml.vision.pulmonary_anomaly import PulmonaryModelWrapper, onnx_reconstruction_panel
 
-        try:
-            state = await self.registry.get("convae_anomaly")
-        except Exception:
-            return await asyncio.to_thread(self._run_demo_vision, image_path)
+        state = await self.registry.get("convae_anomaly")
             
         if not state.is_available:
-            return await asyncio.to_thread(self._run_demo_vision, image_path)
+            raise ModelNotLoadedError(f"Chest X-ray vision model unavailable: {state.load_error or 'not loaded'}")
         
-        # If model is None, it's a fallback/stub in the registry
         if state.model is None:
-             return await asyncio.to_thread(self._run_demo_vision, image_path)
+            raise ModelNotLoadedError("Chest X-ray vision model unavailable: no trained artifact loaded.")
 
         if isinstance(state.model, PulmonaryModelWrapper):
             anomaly_score, model_confidence, heatmap_b64, top_regions = await asyncio.to_thread(
