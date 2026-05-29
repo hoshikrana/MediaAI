@@ -71,7 +71,7 @@ class Settings(BaseSettings):
     RATE_LIMIT_AUTH: str = "5/minute"
 
     # === Logging ===
-    LOG_LEVEL: str = "DEBUG"
+    LOG_LEVEL: str = "INFO"
     LOG_DIR: Path = Path("./backend/logs")
 
     @field_validator("ALLOWED_ORIGINS", "TRUSTED_HOSTS", mode="before")

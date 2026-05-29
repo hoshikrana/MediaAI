@@ -104,6 +104,8 @@ def setup_logging():
     logging.getLogger("uvicorn.access").propagate = False
     logging.getLogger("httpx").setLevel(logging.WARNING)
     logging.getLogger("chromadb").setLevel(logging.WARNING)
+    logging.getLogger("aiosqlite").setLevel(logging.WARNING)
+    logging.getLogger("sqlalchemy.engine").setLevel(logging.WARNING)
 
 class MLLogger:
     def __init__(self):
