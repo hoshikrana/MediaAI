@@ -1,15 +1,18 @@
 import io
 import base64
+import re
 from datetime import datetime, timezone
 from pathlib import Path
-from PIL import Image as PILImage
 
+from PIL import Image as PILImage
 from reportlab.lib.pagesizes import A4
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image, Table, TableStyle, HRFlowable, PageBreak
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.colors import HexColor, white, black, lightgrey
 from reportlab.lib.units import inch
-from reportlab.lib.enums import TA_CENTER, TA_LEFT
+from reportlab.platypus import (
+    SimpleDocTemplate, Paragraph, Spacer, Image, Table, TableStyle, PageBreak
+)
+from reportlab.lib.enums import TA_CENTER
 
 NAVY = HexColor("#0A1628")
 TEAL = HexColor("#00D4B4")
@@ -18,8 +21,9 @@ RISK_MEDIUM = HexColor("#FFB347")
 RISK_LOW = HexColor("#44FF88")
 GRAY = HexColor("#94A3B8")
 
+
 class MedicalReportGenerator:
-    
+
     @staticmethod
     def generate(session_data: dict, output_path: Path) -> Path:
         doc = SimpleDocTemplate(
@@ -27,99 +31,170 @@ class MedicalReportGenerator:
             rightMargin=inch, leftMargin=inch,
             topMargin=inch, bottomMargin=inch
         )
-        
+
         styles = getSampleStyleSheet()
-        styles.add(ParagraphStyle(name='TitleNavy', parent=styles['Heading1'], textColor=NAVY, fontSize=24, alignment=TA_CENTER))
-        styles.add(ParagraphStyle(name='SubtitleGray', parent=styles['Normal'], textColor=GRAY, fontSize=12, alignment=TA_CENTER))
-        styles.add(ParagraphStyle(name='SectionHeader', parent=styles['Heading2'], textColor=TEAL, fontSize=16, spaceAfter=12))
-        styles.add(ParagraphStyle(name='CustomBodyText', parent=styles['Normal'], fontSize=10, leading=14))
-        styles.add(ParagraphStyle(name='Disclaimer', parent=styles['Normal'], textColor=black, fontSize=9, backColor=HexColor("#FFF9C4"), borderPadding=10))
+        styles.add(
+            ParagraphStyle(
+                name='TitleNavy', parent=styles['Heading1'], textColor=NAVY,
+                fontSize=24, alignment=TA_CENTER
+            )
+        )
+        styles.add(
+            ParagraphStyle(
+                name='SubtitleGray', parent=styles['Normal'], textColor=GRAY,
+                fontSize=12, alignment=TA_CENTER
+            )
+        )
+        styles.add(
+            ParagraphStyle(
+                name='SectionHeader', parent=styles['Heading2'], textColor=TEAL,
+                fontSize=16, spaceAfter=12
+            )
+        )
+        styles.add(
+            ParagraphStyle(
+                name='CustomBodyText', parent=styles['Normal'], fontSize=10,
+                leading=14
+            )
+        )
+        styles.add(
+            ParagraphStyle(
+                name='Disclaimer', parent=styles['Normal'], textColor=black,
+                fontSize=9, backColor=HexColor("#FFF9C4"), borderPadding=10
+            )
+        )
 
         story = []
 
         # --- PAGE 1: COVER PAGE ---
         story.append(Paragraph("<b>MedSight AI</b>", styles['TitleNavy']))
-        story.append(Paragraph("Diagnostic Analysis Report", styles['SubtitleGray']))
+        story.append(
+            Paragraph("Diagnostic Analysis Report", styles['SubtitleGray'])
+        )
         story.append(Spacer(1, 0.5 * inch))
-        
+
         # Meta Table
         meta_data = [
             ["Report ID:", session_data.get("id", "N/A")],
-            ["Generated:", datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")],
+            [
+                "Generated:",
+                datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+            ],
             ["Patient ID:", session_data.get("patient_id", "Anonymous")],
             ["Status:", session_data.get("status", "N/A")]
         ]
-        t_meta = Table(meta_data, colWidths=[1.5*inch, 3.5*inch])
+        t_meta = Table(meta_data, colWidths=[1.5 * inch, 3.5 * inch])
         t_meta.setStyle(TableStyle([
-            ('TEXTCOLOR', (0,0), (0,-1), NAVY),
-            ('FONTNAME', (0,0), (-1,-1), 'Helvetica'),
-            ('BOTTOMPADDING', (0,0), (-1,-1), 8),
+            ('TEXTCOLOR', (0, 0), (0, -1), NAVY),
+            ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
         ]))
         story.append(t_meta)
         story.append(Spacer(1, 1 * inch))
-        
+
         # Risk Badge (Table hack for background color)
         risk = session_data.get("risk_level", "UNKNOWN")
-        bg_color = RISK_HIGH if risk == "HIGH" else RISK_MEDIUM if risk == "MEDIUM" else RISK_LOW
-        risk_data = [[Paragraph(f"<b>{risk} RISK DETECTED</b>", ParagraphStyle(name='R', textColor=white, alignment=TA_CENTER, fontSize=16))]]
-        t_risk = Table(risk_data, colWidths=[4*inch], rowHeights=[0.8*inch])
+        bg_color = (
+            RISK_HIGH if risk == "HIGH"
+            else RISK_MEDIUM if risk == "MEDIUM"
+            else RISK_LOW
+        )
+        risk_data = [[
+            Paragraph(
+                f"<b>{risk} RISK DETECTED</b>",
+                ParagraphStyle(
+                    name='R', textColor=white, alignment=TA_CENTER, fontSize=16
+                )
+            )
+        ]]
+        t_risk = Table(risk_data, colWidths=[4 * inch], rowHeights=[0.8 * inch])
         t_risk.setStyle(TableStyle([
-            ('BACKGROUND', (0,0), (-1,-1), bg_color),
-            ('ALIGN', (0,0), (-1,-1), 'CENTER'),
-            ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
-            ('LEFTPADDING', (0,0), (-1,-1), 0),
+            ('BACKGROUND', (0, 0), (-1, -1), bg_color),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('LEFTPADDING', (0, 0), (-1, -1), 0),
         ]))
         story.append(t_risk)
         story.append(Spacer(1, 1.5 * inch))
-        
+
         # Disclaimer
-        disclaimer_txt = "<b>⚠️ EDUCATIONAL PURPOSES ONLY</b><br/>This report is generated by an AI system. It is NOT a clinical diagnosis. Please consult a licensed healthcare professional."
+        disclaimer_txt = (
+            "<b>⚠️ EDUCATIONAL PURPOSES ONLY</b><br/>This report is generated "
+            "by an AI system. It is NOT a clinical diagnosis. Please consult a "
+            "licensed healthcare professional."
+        )
         story.append(Paragraph(disclaimer_txt, styles['Disclaimer']))
         story.append(PageBreak())
 
         # --- PAGE 2: IMAGING FINDINGS ---
         story.append(Paragraph("Imaging Findings", styles['SectionHeader']))
-        
+
         result_json = session_data.get("result_json", {})
         vision = result_json.get("vision", {})
-        
+
         if vision and vision.get("heatmap_base64"):
             try:
-                # Assuming base64 is properly formatted "data:image/png;base64,....."
-                b64_data = vision["heatmap_base64"].split(",")[1] if "," in vision["heatmap_base64"] else vision["heatmap_base64"]
+                # Assuming base64 is properly formatted "data:image/png;base64,..."
+                b64_data = (
+                    vision["heatmap_base64"].split(",")[1]
+                    if "," in vision["heatmap_base64"]
+                    else vision["heatmap_base64"]
+                )
                 img_data = base64.b64decode(b64_data)
                 img = PILImage.open(io.BytesIO(img_data))
-                
+
                 # Resize if massive
                 img.thumbnail((800, 800))
-                tmp_img = Path(output_path).parent / f"temp_img_{session_data.get('id', '1')}.png"
+                tmp_img = (
+                    Path(output_path).parent /
+                    f"temp_img_{session_data.get('id', '1')}.png"
+                )
                 img.save(tmp_img)
-                
-                rl_img = Image(str(tmp_img), width=4*inch, height=4*inch)
+
+                rl_img = Image(str(tmp_img), width=4 * inch, height=4 * inch)
                 story.append(rl_img)
-                
-                # Cleanup temp image will be handled by OS or caller if needed, 
-                # but best to delete it immediately after ReportLab builds the doc.
-                # ReportLab reads it lazily, so we leave it for now.
-            except Exception as e:
-                story.append(Paragraph(f"<i>Could not render heatmap image.</i>", styles['CustomBodyText']))
-                
+
+            except Exception:
+                story.append(
+                    Paragraph(
+                        "<i>Could not render heatmap image.</i>",
+                        styles['CustomBodyText']
+                    )
+                )
+
         story.append(Spacer(1, 0.5 * inch))
-        story.append(Paragraph(f"<b>Anomaly Score:</b> {vision.get('anomaly_score', 'N/A')} / 100", styles['CustomBodyText']))
-        
+        story.append(
+            Paragraph(
+                f"<b>Anomaly Score:</b> {vision.get('anomaly_score', 'N/A')} / "
+                "100",
+                styles['CustomBodyText']
+            )
+        )
+
         if vision.get("top_regions"):
             story.append(Spacer(1, 0.2 * inch))
-            story.append(Paragraph("<b>Top Suspicious Regions:</b>", styles['CustomBodyText']))
+            story.append(
+                Paragraph(
+                    "<b>Top Suspicious Regions:</b>", styles['CustomBodyText']
+                )
+            )
             r_data = [["Region", "Confidence", "Coordinates (X,Y,W,H)"]]
             for i, r in enumerate(vision["top_regions"], 1):
-                r_data.append([str(i), f"{r.get('confidence', 0)*100:.1f}%", f"{r.get('x')}, {r.get('y')}, {r.get('width')}, {r.get('height')}"])
-            
-            t_regions = Table(r_data, colWidths=[1*inch, 1.5*inch, 3*inch])
+                r_data.append([
+                    str(i),
+                    f"{r.get('confidence', 0) * 100:.1f}%",
+                    f"{r.get('x')}, {r.get('y')}, {r.get('width')}, "
+                    f"{r.get('height')}"
+                ])
+
+            t_regions = Table(
+                r_data, colWidths=[1 * inch, 1.5 * inch, 3 * inch]
+            )
             t_regions.setStyle(TableStyle([
-                ('BACKGROUND', (0,0), (-1,0), NAVY),
-                ('TEXTCOLOR', (0,0), (-1,0), white),
-                ('GRID', (0,0), (-1,-1), 1, lightgrey),
-                ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold')
+                ('BACKGROUND', (0, 0), (-1, 0), NAVY),
+                ('TEXTCOLOR', (0, 0), (-1, 0), white),
+                ('GRID', (0, 0), (-1, -1), 1, lightgrey),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold')
             ]))
             story.append(t_regions)
 
@@ -128,57 +203,97 @@ class MedicalReportGenerator:
         # --- PAGE 3: CLINICAL ANALYSIS ---
         story.append(Paragraph("Clinical Analysis", styles['SectionHeader']))
         nlp = result_json.get("nlp", {})
-        
+
         if nlp:
-            story.append(Paragraph(f"<b>Primary Impression:</b> {nlp.get('primary_diagnosis', 'N/A')}", styles['CustomBodyText']))
-            story.append(Paragraph(f"<b>Confidence:</b> {nlp.get('diagnosis_confidence', 0)*100:.1f}%", styles['CustomBodyText']))
-            story.append(Spacer(1, 0.2*inch))
-            
+            story.append(
+                Paragraph(
+                    f"<b>Primary Impression:</b> "
+                    f"{nlp.get('primary_diagnosis', 'N/A')}",
+                    styles['CustomBodyText']
+                )
+            )
+            story.append(
+                Paragraph(
+                    f"<b>Confidence:</b> "
+                    f"{nlp.get('diagnosis_confidence', 0) * 100:.1f}%",
+                    styles['CustomBodyText']
+                )
+            )
+            story.append(Spacer(1, 0.2 * inch))
+
             if nlp.get("differential"):
-                story.append(Paragraph("<b>Differential Diagnosis:</b>", styles['CustomBodyText']))
+                story.append(
+                    Paragraph(
+                        "<b>Differential Diagnosis:</b>",
+                        styles['CustomBodyText']
+                    )
+                )
                 diff_data = [["Condition", "Confidence"]]
                 for d in nlp["differential"]:
-                    diff_data.append([d.get("disease"), f"{d.get('confidence', 0)*100:.1f}%"])
-                
-                t_diff = Table(diff_data, colWidths=[3*inch, 2*inch])
+                    diff_data.append([
+                        d.get("disease"),
+                        f"{d.get('confidence', 0) * 100:.1f}%"
+                    ])
+
+                t_diff = Table(diff_data, colWidths=[3 * inch, 2 * inch])
                 t_diff.setStyle(TableStyle([
-                    ('BACKGROUND', (0,0), (-1,0), NAVY),
-                    ('TEXTCOLOR', (0,0), (-1,0), white),
-                    ('GRID', (0,0), (-1,-1), 1, lightgrey),
+                    ('BACKGROUND', (0, 0), (-1, 0), NAVY),
+                    ('TEXTCOLOR', (0, 0), (-1, 0), white),
+                    ('GRID', (0, 0), (-1, -1), 1, lightgrey),
                 ]))
                 story.append(t_diff)
         else:
-            story.append(Paragraph("<i>No NLP data available.</i>", styles['CustomBodyText']))
-            
+            story.append(
+                Paragraph(
+                    "<i>No NLP data available.</i>", styles['CustomBodyText']
+                )
+            )
+
         story.append(PageBreak())
 
         # --- PAGE 4: NARRATIVE ---
         story.append(Paragraph("AI Narrative Report", styles['SectionHeader']))
         report_text = result_json.get("report_text", "No narrative generated.")
-        
+
         # Simple markdown to ReportLab parsing
-        import re
         def md_to_rl(text):
             # Convert markdown bold **text** to <b>text</b>
             text = re.sub(r'\*\*(.+?)\*\*', r'<b>\1</b>', text)
             # Strip heading markers (### and ##) and wrap in bold
-            text = re.sub(r'^###\s*(.+)$', r'<b><u>\1</u></b>', text, flags=re.MULTILINE)
-            text = re.sub(r'^##\s*(.+)$', r'<font size="14" color="#00D4B4"><b>\1</b></font>', text, flags=re.MULTILINE)
+            text = re.sub(
+                r'^###\s*(.+)$', r'<b><u>\1</u></b>', text,
+                flags=re.MULTILINE
+            )
+            text = re.sub(
+                r'^##\s*(.+)$',
+                r'<font size="14" color="#00D4B4"><b>\1</b></font>',
+                text, flags=re.MULTILINE
+            )
             # Convert line breaks
             text = text.replace('\n', '<br/>')
             return text
+
         report_text = md_to_rl(report_text)
-        
+
         story.append(Paragraph(report_text, styles['CustomBodyText']))
-        story.append(Spacer(1, 0.5*inch))
-        story.append(Paragraph("<i>Footnote: Report generated by BioGPT-base language model.</i>", styles['CustomBodyText']))
+        story.append(Spacer(1, 0.5 * inch))
+        story.append(
+            Paragraph(
+                "<i>Footnote: Report generated by BioGPT-base language "
+                "model.</i>",
+                styles['CustomBodyText']
+            )
+        )
 
         # Build Document with Footer callback
         def add_footer(canvas, doc):
             canvas.saveState()
             canvas.setFont('Helvetica', 9)
             canvas.setFillColor(GRAY)
-            canvas.drawString(inch, 0.5 * inch, f"MedSight AI | Confidential | Page {doc.page}")
+            canvas.drawString(
+                inch, 0.5 * inch,
+                f"MedSight AI | Confidential | Page {doc.page}"
+            )
             canvas.restoreState()
 
         doc.build(story, onFirstPage=add_footer, onLaterPages=add_footer)
