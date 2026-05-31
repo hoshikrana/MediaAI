@@ -79,14 +79,16 @@ class ImageValidator:
 
         # EXIF script injection check
         first_2kb = content[:2048].decode('utf-8', errors='ignore').lower()
-        if any(bad in first_2kb for bad in ["<script", "javascript:",
-                                              "eval("]):
-            logger.error("Security alert: Script payload detected in image "
-                         "bytes")
+        if any(bad in first_2kb
+               for bad in ["<script", "javascript:", "eval("]):
+            logger.error(
+                "Security alert: Script payload detected in image bytes"
+            )
             raise SecurityError("Invalid file content detected")
 
         return ImageMetadata(
-            filename=file.filename or "unknown.png", size_bytes=len(content),
+            filename=file.filename or "unknown.png",
+            size_bytes=len(content),
             mime_type=mime, width=width, height=height, mode=mode,
             content=content
         )
@@ -119,28 +121,29 @@ class ImageValidator:
 
         if max_channel_delta > 8.0:
             raise InvalidFileError(
-                "Only grayscale chest X-ray images are supported. Please "
-                "upload a radiograph, not a color photo."
+                "Only grayscale chest X-ray images are supported. "
+                "Please upload a radiograph, not a color photo."
             )
 
         if bright_ratio > 0.35 or contrast < 0.08:
             raise InvalidFileError(
-                "This image does not look like a usable chest X-ray. Please "
-                "upload a clear frontal chest radiograph."
+                "This image does not look like a usable chest X-ray. "
+                "Please upload a clear frontal chest radiograph."
             )
 
         try:
             import cv2
 
             cascade_path = (
-                Path(cv2.data.haarcascades) /
-                "haarcascade_frontalface_default.xml"
+                Path(cv2.data.haarcascades)
+                / "haarcascade_frontalface_default.xml"
             )
             if cascade_path.is_file():
                 face_detector = cv2.CascadeClassifier(str(cascade_path))
                 gray_u8 = np.uint8(gray * 255)
                 faces = face_detector.detectMultiScale(
-                    gray_u8, scaleFactor=1.1, minNeighbors=5, minSize=(32, 32)
+                    gray_u8, scaleFactor=1.1, minNeighbors=5,
+                    minSize=(32, 32)
                 )
                 if len(faces) > 0:
                     raise InvalidFileError(
@@ -171,11 +174,13 @@ def sanitize_symptoms_text(text: str) -> str:
     ]
     for pattern in injection_patterns:
         if re.search(pattern, text, re.IGNORECASE):
-            logger.warning("Prompt injection detected in input",
-                           extra={"pattern": pattern})
+            logger.warning(
+                "Prompt injection detected in input",
+                extra={"pattern": pattern}
+            )
             raise PromptInjectionError(
-                "Input contains disallowed content. Please describe symptoms "
-                "naturally."
+                "Input contains disallowed content. "
+                "Please describe symptoms naturally."
             )
 
     max_length = 2000
@@ -190,8 +195,8 @@ def validate_patient_id(patient_id: str) -> str:
         return ""
     if not re.match(r"^[a-zA-Z0-9_-]{1,50}$", patient_id):
         raise ValidationError(
-            "Patient ID must be 1-50 characters: letters, numbers, hyphens, "
-            "underscores only"
+            "Patient ID must be 1-50 characters: "
+            "letters, numbers, hyphens, underscores only"
         )
     return patient_id
 
